@@ -44,18 +44,18 @@ from mizani.formatters import percent_format
 #| echo: true
 #| cache: true
 
-ticker = ["AAPL", "MSFT", "BA"]
-prices = tf.download_data(
-  domain="stock_prices", 
-  symbols=ticker,
-  start_date="2000-01-01", 
-  end_date="2025-12-31"
+sp500 = tf.download_data(
+    type="stock_prices",
+    symbols="^GSPC",
+    start_date="2000-01-01",
+    end_date="2026-02-28"
 )
 
-returns = (prices
-  .assign(ret=lambda x: x.groupby("symbol")["adjusted_close"].pct_change())
-  .get(["symbol", "date", "ret"])
-  .dropna(subset="ret")
+tbill = tf.download_data(
+    type="stock_prices",
+    symbols="^IRX",
+    start_date="2000-01-01",
+    end_date="2026-02-28"
 )
 ```
 
@@ -65,47 +65,53 @@ returns = (prices
 #| label: fig-return-distribution
 #| fig-cap: Distribution of daily stock returns. 
 
-returns_figure = (
-  ggplot(returns, aes(x="ret", fill="symbol")) +
-  geom_histogram(bins=100) +
-  labs(x="", y="",
-       fill ="") +
-  facet_wrap("symbol") +
-  scale_x_continuous(labels=percent_format()) +
-  theme_bw() +
-  theme(legend_position = "none")
+# Get end-of-month prices
+sp500["month"] = pd.to_datetime(sp500["date"]).dt.to_period("M")
+sp500_monthly = (sp500
+    .sort_values("date")
+    .groupby("month")
+    .last()
+    .reset_index()
 )
-returns_figure.draw()
+sp500_monthly["r_m"] = sp500_monthly["adjusted"].pct_change()
+sp500_monthly = sp500_monthly.dropna(subset=["r_m"])
+
+# T-Bill: annualized % → monthly decimal
+tbill["month"] = pd.to_datetime(tbill["date"]).dt.to_period("M")
+tbill_monthly = (tbill
+    .sort_values("date")
+    .groupby("month")
+    .last()
+    .reset_index()
+)
+tbill_monthly["r_f"] = tbill_monthly["adjusted"] / 100 / 12
 ```
 
-@fig-return-distribution shows the distribution of daily returns for the three assets.
 
-1. Compute the sample mean $\mu$ and the variance-covariance matrix $\Sigma$ of the returns.
-Which of the individual assets delivered the highest Sharpe ratio (assume the risk-free rate is zero) during the sample period?^[Whenever reporting performance measures, compute annualized values and clearly state how you calculated the measure.]
-The estimated moments may later be used for the construction of optimal portfolios (@Markowitz1952; @Merton1972)
 
 ```{python}
-returns_matrix = (prices
-  .pivot(columns="symbol", 
-         values="adjusted_close", 
-         index="date")
-  .pct_change()
-  .dropna()
+merged = sp500_monthly.merge(
+    tbill_monthly[["month", "r_f"]],
+    on="month"
 )
 
-mu = np.array(returns_matrix.mean()).T
-sigma = np.array(returns_matrix.cov())
-
-sharpe_ratio = pd.DataFrame({"ticker": ticker,
-  "Sharpe": np.sqrt(250) * mu / np.sqrt(np.diag(sigma))})
+merged["r_excess"] = merged["r_m"] - merged["r_f"]
 ```
 
-**Answer: ** The asset with the highest annualized Sharpe-ratio, computed as 
-$$
-\sqrt{250}\frac{\hat\mu_i}{\hat\sigma_i},
-$$
+```{python}
+mu_monthly   = merged["r_excess"].mean()
+var_monthly  = merged["r_excess"].var()
 
-where $\hat\mu_i$ is the sample mean of asset $i$s dailies returns and $\hat\sigma_i$ is the standard deviation of asset $i$s dailys returns is `{python} sharpe_ratio.loc[sharpe_ratio['Sharpe'] == sharpe_ratio['Sharpe'].max(), 'ticker'].iloc[0]` with an annualized Sharpe-ratio of `{python} round(sharpe_ratio['Sharpe'].max(), 3)`. @tbl-sharpe-ratios illustrates all Sharpe ratios. 
+mu_annual    = mu_monthly * 12
+var_annual   = var_monthly * 12
+
+print(f"Monthly mean excess return:       {mu_monthly:.6f}")
+print(f"Monthly variance:                 {var_monthly:.6f}")
+print(f"Annualized mean excess return:    {mu_annual:.6f}")
+print(f"Annualized variance:              {var_annual:.6f}")
+```
+
+
 
 ```{python}
 #| tbl-cap: Historical annualized Sharpe-ratios
