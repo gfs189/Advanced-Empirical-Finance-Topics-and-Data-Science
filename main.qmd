@@ -36,79 +36,126 @@ Quarto enables you to weave together content and executable code into a finished
 import pandas as pd
 import numpy as np
 import tidyfinance as tf
-from plotnine import *
+from plotnine import * 
+import tidyfinance as tf
 from mizani.formatters import percent_format
+import io
+import re
+import zipfile
+from curl_cffi import requests
+import os 
+from joblib import Parallel, delayed, cpu_count
+from itertools import product
+from dateutil.relativedelta import relativedelta
+import statsmodels.formula.api as smf
+import pyarrow.dataset as ds
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+from scipy.optimize import minimize
 ```
 
 ```{python} 
 #| echo: true
 #| cache: true
+start_date = "2000-01-01"
+end_date = "2026-2-28"
 
 sp500 = tf.download_data(
-    type="stock_prices",
+    domain="stock_prices",
     symbols="^GSPC",
-    start_date="2000-01-01",
-    end_date="2026-02-28"
+    start_date=start_date,
+    end_date=end_date,
 )
 
 tbill = tf.download_data(
-    type="stock_prices",
+    domain="stock_prices",
     symbols="^IRX",
-    start_date="2000-01-01",
-    end_date="2026-02-28"
+    start_date=start_date,
+    end_date=end_date,
 )
+sp500.head().round(3)
+
+sp500_figure = (
+    ggplot(sp500, aes(y="adjusted_close", x="date"))
+    + geom_line()
+    + labs(x="", y="", title="sp500 stock prices 2000-2026")
+)
+sp500_figure.show()
+
+tbill_figure = (
+    ggplot(tbill, aes(y="adjusted_close", x="date"))
+    + geom_line()
+    + labs(x="", y="", title="tbill 2000-2026")
+)
+tbill_figure.show()
 ```
 
 1. Visualize the distribution of the daily returns.
 
 ```{python}
-#| label: fig-return-distribution
-#| fig-cap: Distribution of daily stock returns. 
-
-# Get end-of-month prices
-sp500["month"] = pd.to_datetime(sp500["date"]).dt.to_period("M")
-sp500_monthly = (sp500
+returns_sp500 = (sp500
     .sort_values("date")
-    .groupby("month")
-    .last()
-    .reset_index()
+    .assign(ret=lambda x: x["adjusted_close"].pct_change())
+    .get(["symbol", "date", "ret"])
 )
-sp500_monthly["r_m"] = sp500_monthly["adjusted"].pct_change()
-sp500_monthly = sp500_monthly.dropna(subset=["r_m"])
+returns_sp500
 
-# T-Bill: annualized % → monthly decimal
-tbill["month"] = pd.to_datetime(tbill["date"]).dt.to_period("M")
-tbill_monthly = (tbill
+returns_tbill = (tbill
     .sort_values("date")
-    .groupby("month")
-    .last()
-    .reset_index()
+    .assign(ret=lambda x: x["adjusted_close"].pct_change())
+    .get(["symbol", "date", "ret"])
 )
-tbill_monthly["r_f"] = tbill_monthly["adjusted"] / 100 / 12
+returns_tbill
 ```
 
 
 
 ```{python}
-merged = sp500_monthly.merge(
-    tbill_monthly[["month", "r_f"]],
-    on="month"
+returns_monthly_sp500 = (returns_sp500
+    .assign(date=returns_sp500["date"].dt.to_period("M").dt.to_timestamp())
+    .groupby(["symbol", "date"], as_index=False)
+    .agg(ret=("ret", lambda x: np.prod(1 + x) - 1))
+)
+print(returns_monthly_sp500.head(100))
+
+returns_monthly_tbill = (
+    returns_tbill
+    .assign(
+        date=lambda x: x["date"].dt.to_period("M").dt.to_timestamp()
+    )
+    .groupby(["symbol", "date"], as_index=False)
+    .agg(ret=("ret", "last"))   # take last yield of month
 )
 
-merged["r_excess"] = merged["r_m"] - merged["r_f"]
+# Convert annual % yield to monthly return
+returns_monthly_tbill["risk_free"] = (
+    (1 + returns_monthly_tbill["ret"] / 100) ** (1/12) - 1
+)
+
+returns_monthly_tbill = returns_monthly_tbill.drop(columns="ret")
+
+# Merge the 2 datasets
+monthly_ret= (returns_monthly_tbill.merge(returns_monthly_sp500, how="inner", on="date")
+    .assign(ret_excess=lambda x: x["ret"]-x["risk_free"])
+)
+monthly_ret.head(10)
+
 ```
 
 ```{python}
-mu_monthly   = merged["r_excess"].mean()
-var_monthly  = merged["r_excess"].var()
+mu_m = monthly_ret["ret_excess"].mean()
+sigma2_m = monthly_ret["ret_excess"].var()
 
-mu_annual    = mu_monthly * 12
-var_annual   = var_monthly * 12
+print("Mean:", mean_return)
+print("Variance:", variance)
 
-print(f"Monthly mean excess return:       {mu_monthly:.6f}")
-print(f"Monthly variance:                 {var_monthly:.6f}")
-print(f"Annualized mean excess return:    {mu_annual:.6f}")
-print(f"Annualized variance:              {var_annual:.6f}")
+annual_mean = 12 * monthly_ret["ret_excess"].mean()
+annual_variance = 12 * monthly_ret["ret_excess"].var()
+
+print(f"Monthly mean excess return:       {mu_monthly_ret:.6f}")
+print(f"Monthly variance:                 {sigma2_m:.6f}")
+print(f"Annualized mean excess return:    {annual_mean:.6f}")
+print(f"Annualized variance:              {monthly_ret:.6f}")
 ```
 
 
