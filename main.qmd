@@ -150,8 +150,8 @@ monthly_ret.head(10)
 mu_m = monthly_ret["ret_excess"].mean()
 sigma2_m = monthly_ret["ret_excess"].var()
 
-print("Mean:", mean_return)
-print("Variance:", variance)
+print("Mean:", mu_m)
+print("Variance:", sigma2_m)
 
 annual_mean = 12 * monthly_ret["ret_excess"].mean()
 annual_variance = 12 * monthly_ret["ret_excess"].var()
@@ -164,18 +164,7 @@ print(f"Annualized variance:              {annual_variance:.6f}")
 
 
 
-```{python}
-#| tbl-cap: Historical annualized Sharpe-ratios
-#| label: tbl-sharpe-ratios
-#| output: asis
-from great_tables import GT
-tbl = (
-    GT(sharpe_ratio)
-    .fmt_number(columns="Sharpe", decimals=3)
-)
-latex_tbl = tbl.as_latex()
-print(latex_tbl)
-```
+
 
 The conclusion is the following:
 
