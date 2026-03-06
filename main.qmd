@@ -57,6 +57,7 @@ from scipy.optimize import minimize
 ```{python} 
 #| echo: true
 #| cache: true
+#| label: figures for period
 start_date = "2000-01-01"
 end_date = "2026-2-28"
 
@@ -93,6 +94,8 @@ tbill_figure.show()
 1. Visualize the distribution of the daily returns.
 
 ```{python}
+#| cache: true
+#| label: returns
 returns_sp500 = (sp500
     .sort_values("date")
     .assign(ret=lambda x: x["adjusted_close"].pct_change())
@@ -111,6 +114,8 @@ returns_tbill
 
 
 ```{python}
+#| cache: true
+#| label: monthly returns
 returns_monthly_sp500 = (returns_sp500
     .assign(date=returns_sp500["date"].dt.to_period("M").dt.to_timestamp())
     .groupby(["symbol", "date"], as_index=False)
@@ -124,17 +129,16 @@ returns_monthly_tbill = (
         date=lambda x: x["date"].dt.to_period("M").dt.to_timestamp()
     )
     .groupby(["symbol", "date"], as_index=False)
-    .agg(ret=("ret", "last"))   # take last yield of month
+    .agg(ret=("ret", "last"))   
 )
 
-# Convert annual % yield to monthly return
 returns_monthly_tbill["risk_free"] = (
     (1 + returns_monthly_tbill["ret"] / 100) ** (1/12) - 1
 )
 
 returns_monthly_tbill = returns_monthly_tbill.drop(columns="ret")
 
-# Merge the 2 datasets
+
 monthly_ret= (returns_monthly_tbill.merge(returns_monthly_sp500, how="inner", on="date")
     .assign(ret_excess=lambda x: x["ret"]-x["risk_free"])
 )
