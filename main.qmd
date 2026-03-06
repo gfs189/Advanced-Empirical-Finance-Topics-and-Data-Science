@@ -51,7 +51,7 @@ from sklearn.covariance import LedoitWolf
 from scipy.optimize import minimize
 ```
 
-# Exercise 1
+## Exercise 
 ```{python} 
 #| cache: true
 #| label: figures for period
@@ -151,7 +151,7 @@ print(f"Annualized variance:              {annual_variance:.3f}")
 ```
 
 
-## Exercise 2
+## Exercise 
 
 ```{python}
 np.random.seed(2026)
@@ -165,7 +165,7 @@ mu = beta * mu_m
 Sigma = sigma2_m * np.outer(beta, beta) + np.diag(sigma_eps**2)
 ```
 
-## Exercise 3 
+## Exercise  
 ```{python}
 def compute_efficient_frontier(mu, Sigma, n_points=100):
 
@@ -216,7 +216,7 @@ print(f"Tangency mu (monthly):     {tangency['mu_p']:.4f}")
 print(f"Tangency sigma (monthly):  {tangency['sigma_p']:.4f}")
 ```
 
-## Exercise 4 
+## Exercise 
 ```{python}
 #| cache: true
 #| label: effecient frontier figure
@@ -272,7 +272,7 @@ plot_4 = (
 plot_4
 ```
 
-## Exercise 5
+## Exercise 
 ```{python}
 #| cache: true
 #| label: estimated frontier figure vs true frontier
@@ -332,7 +332,7 @@ plot_5 = (
 plot_5
 ```
 
-## Exercise 6
+## Exercise 
 ```{python}
 #| cache: true
 #| label: out of sample sharpe ratio of plug in
@@ -382,6 +382,7 @@ plot_6 = (
 plot_6
 ```
 
+## Exercise 
 ```{python}
 
 
