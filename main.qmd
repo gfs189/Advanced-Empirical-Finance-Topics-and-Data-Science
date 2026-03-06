@@ -279,7 +279,7 @@ def compute_plug_in_frontier(T, mu, Sigma, n_points=100):
     sim = simulate_returns(T, mu, Sigma)
     mu_hat = sim.mean(axis=0)
     Sigma_hat = np.cov(sim, rowvar=False)
-    frontierhat,  = compute_efficient_frontier(mu_hat, Sigma_hat, n_points)
+    frontier_hat,  = compute_efficient_frontier(mu_hat, Sigma_hat, n_points)
 
     records = []
     for w in frontier_hat["weights"]:
