@@ -24,13 +24,10 @@ format:
 ---
 
 
-## Quarto - a framework for reproducible research
+.
+## Exercise 1
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>. When you click the **Preview** button in Positron or type `quarto render` in the terminal a .pdf document will be generated that includes both content and the output of embedded code. The template below can be used to submit your answers for the mandatory assignment. Within the template you find all typical issues. By default, code is omitted in the output (can be changed with `echo: true` in line 6). Formatting is done using markdown (e.g., check out how to use \# to define sections and subsections or how to generate bold text). Footnotes and citations are easy. You can also include math notation using LaTeX style. The template contains inline code execution (e.g. to automatically return the ticker of the asset with the highest Sharpe ratio) and shows how to embed figures into the document.
 
-## Exercise
-
-1. Download daily adjusted prices for all constituents of three stocks: AAPL, MSFT, and BA for the period from January 1st, 2000 until December 31st, 2025 from Yahoo!Finance. Explicitly include the code you use to download the data into your report. Compute the daily returns for each of the tickers.
 
 ```{python}
 import pandas as pd
@@ -55,7 +52,6 @@ from scipy.optimize import minimize
 ```
 
 ```{python} 
-#| echo: true
 #| cache: true
 #| label: figures for period
 start_date = "2000-01-01"
@@ -79,14 +75,14 @@ sp500.head().round(3)
 sp500_figure = (
     ggplot(sp500, aes(y="adjusted_close", x="date"))
     + geom_line()
-    + labs(x="", y="", title="sp500 stock prices 2000-2026")
+    + labs(x="", y="", title="S&P 500 stock prices(in USD) 2000-2026")
 )
 sp500_figure.show()
 
 tbill_figure = (
     ggplot(tbill, aes(y="adjusted_close", x="date"))
     + geom_line()
-    + labs(x="", y="", title="tbill 2000-2026")
+    + labs(x="", y="", title="tbill (in USD) 2000-2026")
 )
 tbill_figure.show()
 ```
@@ -99,16 +95,13 @@ tbill_figure.show()
 returns_sp500 = (sp500
     .sort_values("date")
     .assign(ret=lambda x: x["adjusted_close"].pct_change())
-    .get(["symbol", "date", "ret"])
-)
-returns_sp500
+    .get(["symbol", "date", "ret"]))
+
 
 returns_tbill = (tbill
     .sort_values("date")
     .assign(ret=lambda x: x["adjusted_close"].pct_change())
-    .get(["symbol", "date", "ret"])
-)
-returns_tbill
+    .get(["symbol", "date", "ret"]))
 ```
 
 
@@ -121,7 +114,6 @@ returns_monthly_sp500 = (returns_sp500
     .groupby(["symbol", "date"], as_index=False)
     .agg(ret=("ret", lambda x: np.prod(1 + x) - 1))
 )
-print(returns_monthly_sp500.head(100))
 
 returns_monthly_tbill = (
     returns_tbill
@@ -142,32 +134,196 @@ returns_monthly_tbill = returns_monthly_tbill.drop(columns="ret")
 monthly_ret= (returns_monthly_tbill.merge(returns_monthly_sp500, how="inner", on="date")
     .assign(ret_excess=lambda x: x["ret"]-x["risk_free"])
 )
-monthly_ret.head(10)
-
 ```
 
 ```{python}
 mu_m = monthly_ret["ret_excess"].mean()
 sigma2_m = monthly_ret["ret_excess"].var()
 
-print("Mean:", mu_m)
-print("Variance:", sigma2_m)
-
 annual_mean = 12 * monthly_ret["ret_excess"].mean()
 annual_variance = 12 * monthly_ret["ret_excess"].var()
 
-print(f"Monthly mean excess return:       {mu_m:.6f}")
-print(f"Monthly variance:                 {sigma2_m:.6f}")
-print(f"Annualized mean excess return:    {annual_mean:.6f}")
-print(f"Annualized variance:              {annual_variance:.6f}")
+print(f"Monthly mean excess return:       {mu_m:.3f}")
+print(f"Monthly variance:                 {sigma2_m:.3f}")
+print(f"Annualized mean excess return:    {annual_mean:.3f}")
+print(f"Annualized variance:              {annual_variance:.3f}")
 ```
 
 
+## Exercise 2
 
+```{python}
+np.random.seed(2026)
 
+N = 50
 
-The conclusion is the following:
+beta = np.random.uniform(0.5, 1.5, N)
+sigma_eps = np.random.uniform(0.10 / np.sqrt(12), 0.30 / np.sqrt(12), N)
 
-## References
-::::{#refs}
-::::
+mu = beta * mu_m
+Sigma = sigma2_m * np.outer(beta, beta) + np.diag(sigma_eps**2)
+```
+
+## Exercise 3 
+```{python}
+def compute_efficient_frontier(mu, Sigma, n_points=100):
+
+    N = len(mu)
+    iota = np.ones(N)
+    Sigma_inv = np.linalg.inv(Sigma)
+
+    A = iota @ Sigma_inv @ mu
+    B = mu @ Sigma_inv @ mu
+    C = iota @ Sigma_inv @ iota
+    D = B * C - A ** 2
+
+    def frontier_weights(mu_bar):
+        g = (B * (Sigma_inv @ iota) - A * (Sigma_inv @ mu)) / D
+        h = (C * (Sigma_inv @ mu) - A * (Sigma_inv @ iota)) / D
+        return g + h * mu_bar
+
+    mu_range = np.linspace(mu.min(), mu.max() * 1.5, n_points)
+
+    records = []
+    for mu_bar in mu_range:
+        w = frontier_weights(mu_bar)
+        mu_p = w @ mu
+        sigma_p = np.sqrt(w @ Sigma @ w)
+        records.append({"mu_p": mu_p, "sigma_p": sigma_p, "weights": w})
+
+    frontier = pd.DataFrame(records)
+
+    w_tan = (Sigma_inv @ mu) / (iota @ Sigma_inv @ mu)
+    mu_tan = w_tan @ mu
+    sigma_tan = np.sqrt(w_tan @ Sigma @ w_tan)
+    sharpe_tan = mu_tan / sigma_tan
+
+    tangency = {
+        "weights": w_tan,
+        "mu_p": mu_tan,
+        "sigma_p": sigma_tan,
+        "sharpe": sharpe_tan
+    }
+
+    return frontier, tangency
+frontier, tangency = compute_efficient_frontier(mu, Sigma)
+
+frontier, tangency = compute_efficient_frontier(mu, Sigma)
+
+print(f"Tangency portfolio Sharpe: {tangency['sharpe']:.4f}")
+print(f"Tangency mu (monthly):     {tangency['mu_p']:.4f}")
+print(f"Tangency sigma (monthly):  {tangency['sigma_p']:.4f}")
+```
+
+## Exercise 4 
+```{python}
+#| cache: true
+#| label: effecient frontier figure
+assets = pd.DataFrame({
+    "mu_p": mu,
+    "sigma_p": np.sqrt(np.diag(Sigma))
+})
+
+mvp_idx = frontier["sigma_p"].idxmin()
+mvp = pd.DataFrame({
+    "mu_p": [frontier.loc[mvp_idx, "mu_p"]],
+    "sigma_p": [frontier.loc[mvp_idx, "sigma_p"]]
+})
+
+tangency_point = pd.DataFrame({
+    "mu_p": [tangency["mu_p"]],
+    "sigma_p": [tangency["sigma_p"]]
+})
+
+plot_4 = (
+    ggplot()
+    + geom_line(
+        data=frontier,
+        mapping=aes(x="sigma_p", y="mu_p"),
+        color="blue", size=1
+    )
+    + geom_point(
+        data=assets,
+        mapping=aes(x="sigma_p", y="mu_p"),
+        color="grey", alpha=0.6, size=2
+    )
+    + geom_point(
+        data=tangency_point,
+        mapping=aes(x="sigma_p", y="mu_p"),
+        color="red", size=4, shape="*"
+    )
+    + geom_point(
+        data=mvp,
+        mapping=aes(x="sigma_p", y="mu_p"),
+        color="darkgreen", size=3, shape="D"
+    )
+    + scale_x_continuous(labels=percent_format())
+    + scale_y_continuous(labels=percent_format())
+    + labs(
+        x="Monthly volatility (σ)",
+        y="Monthly excess return (μ)",
+        title="Mean-variance efficient frontier (true parameters)",
+        caption="Red star: tangency portfolio. Green diamond: minimum variance portfolio. Grey dots: individual assets."
+    )
+    + theme_bw()
+)
+
+plot_4
+```
+
+```{python}
+def simulate_returns(periods, expected_returns, covariance_matrix):
+    return np.random.multivariate_normal(expected_returns, covariance_matrix, size=periods)
+
+def compute_plug_in_frontier(T, mu, Sigma, n_points=100):
+    sim = simulate_returns(T, mu, Sigma)
+    mu_hat = sim.mean(axis=0)
+    Sigma_hat = np.cov(sim, rowvar=False)
+    frontierhat,  = compute_efficient_frontier(mu_hat, Sigma_hat, n_points)
+
+    records = []
+    for w in frontier_hat["weights"]:
+        mu_p_true = w @ mu
+        sigma_p_true = np.sqrt(w @ Sigma @ w)
+        records.append({"mu_p": mu_p_true, "sigma_p": sigma_p_true})
+
+    return pd.DataFrame(records)
+
+T_values = [60, 120, 240, 1200]
+n_simulations = 25
+
+records = []
+for T in T_values: 
+    for _ in range(n_simulations):
+        frontier_hat = compute_plug_in_frontier(T, mu, Sigma)
+        frontier_hat["T"] = f"T = {T}"
+        records.append(frontier_hat)
+
+simulated_frontiers = pd.concat(records, ignore_index=True)
+
+plot_5 = (
+    ggplot()
+    + geom_line(
+        data=simulated_frontiers,
+        mapping=aes(x="sigma_p", y="mu_p", group="T"),
+        color="lightblue", alpha=0.4, size=0.5
+    )
+    + geom_line(
+        data=frontier,
+        mapping=aes(x="sigma_p", y="mu_p"),
+        color="blue", size=1
+    )
+    + scale_x_continuous(labels=percent_format())
+    + scale_y_continuous(labels=percent_format())
+    + facet_wrap("T")
+    + labs(
+        x="Monthly volatility (σ)",
+        y="Monthly excess return (μ)",
+        title="Estimated vs true efficient frontier",
+        caption="Light blue: plug-in frontiers. Dark blue: true frontier."
+    )
+    + theme_bw()
+)
+
+plot_5
+```
