@@ -152,10 +152,10 @@ print("Variance:", variance)
 annual_mean = 12 * monthly_ret["ret_excess"].mean()
 annual_variance = 12 * monthly_ret["ret_excess"].var()
 
-print(f"Monthly mean excess return:       {mu_monthly_ret:.6f}")
+print(f"Monthly mean excess return:       {mu_m:.6f}")
 print(f"Monthly variance:                 {sigma2_m:.6f}")
 print(f"Annualized mean excess return:    {annual_mean:.6f}")
-print(f"Annualized variance:              {monthly_ret:.6f}")
+print(f"Annualized variance:              {annual_variance:.6f}")
 ```
 
 
