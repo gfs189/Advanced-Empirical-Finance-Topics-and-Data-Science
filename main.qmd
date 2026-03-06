@@ -51,6 +51,9 @@ from sklearn.covariance import LedoitWolf
 from scipy.optimize import minimize
 ```
 
+In this assignment we are investigating how different portfolio weights can lead to statistical errors based on the paper of Brandt(2010) and Jobson et.al(1980). 
+The method to test this is to check how our portfolio weights deviate from the optimal in a single factor model market model which treats the calibrated parameters as the true values. 
+
 ##  
 ```{python} 
 #| cache: true
@@ -88,7 +91,7 @@ sp500_figure.show()
 tbill_figure = (
     ggplot(tbill, aes(y="adjusted_close", x="date"))
     + geom_line()
-    + labs(x="", y="", title="13-week T-Bill rate (annualized %) 2000-2026")
+    + labs(x="", y="", title="13-week T-Bill (in USD) 2000-2026")
 )
 tbill_figure.show()
 ```
