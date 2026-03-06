@@ -607,6 +607,10 @@ minimum variance and plug-in tangency portfolios perform similarly, with both be
 to sample size. Notably, none of the strategies reach the true tangency Sharpe ratio (dashed 
 blue line), highlighting the persistent cost of estimation uncertainty.
 
+## Conclusion
+
+We conlude that estimation error can have a significant impact on the performance of mean-variance optimal portfolios, especially when the sample size is small relative to the number of assets. The plug-in tangency portfolio, which relies heavily on estimated parameters, can perform poorly out-of-sample due to estimation error. Alternative strategies such as equal-weighting and constrained optimization can help mitigate this issue, but they also come with trade-offs. Overall, our analysis underscores the importance of considering estimation risk in portfolio construction and the potential benefits of simpler or more robust strategies in practice.
+
 ## References
 ::::{#refs}
 ::::
