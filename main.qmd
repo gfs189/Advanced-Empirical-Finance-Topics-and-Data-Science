@@ -51,7 +51,7 @@ from sklearn.covariance import LedoitWolf
 from scipy.optimize import minimize
 ```
 
-In this assignment we are investigating how different portfolio weights can lead to statistical errors based on the paper of Brandt(2010) and Jobson et.al(1980). 
+In this assignment we are investigating how different portfolio weights can lead to statistical errors based on the paper of @987c7289-8939-3a32-96f2-3d9b692dffee and @BRANDT2010269. 
 The method to test this is to check how our portfolio weights deviate from the optimal in a single factor model market model which treats the calibrated parameters as the true values. we use this equation for portfolio weights:
 $$
 \hat{\omega}(\bar{\mu}) = \arg\min_{\omega} \, \omega' \hat{\Sigma} \omega 
