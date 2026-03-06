@@ -6,7 +6,7 @@ date-format: MMMM DD, YYYY
 execute: 
   echo: false
   warning: false
-format:
+format: 
   pdf: 
     number-sections: true
     colorlinks: true
@@ -606,3 +606,7 @@ no-short-selling constraint dampens the most extreme estimation-error-driven pos
 minimum variance and plug-in tangency portfolios perform similarly, with both being sensitive 
 to sample size. Notably, none of the strategies reach the true tangency Sharpe ratio (dashed 
 blue line), highlighting the persistent cost of estimation uncertainty.
+
+## References
+::::{#refs}
+::::
