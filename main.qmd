@@ -25,8 +25,6 @@ format:
 
 
 .
-## Exercise 1
-
 
 
 ```{python}
@@ -49,8 +47,11 @@ import pyarrow.dataset as ds
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from scipy.optimize import minimize
+from sklearn.covariance import LedoitWolf
+from scipy.optimize import minimize
 ```
 
+# Exercise 1
 ```{python} 
 #| cache: true
 #| label: figures for period
@@ -271,7 +272,10 @@ plot_4 = (
 plot_4
 ```
 
+## Exercise 5
 ```{python}
+#| cache: true
+#| label: estimated frontier figure vs true frontier
 def simulate_returns(periods, expected_returns, covariance_matrix):
     return np.random.multivariate_normal(expected_returns, covariance_matrix, size=periods)
 
@@ -279,7 +283,7 @@ def compute_plug_in_frontier(T, mu, Sigma, n_points=100):
     sim = simulate_returns(T, mu, Sigma)
     mu_hat = sim.mean(axis=0)
     Sigma_hat = np.cov(sim, rowvar=False)
-    frontier_hat,  = compute_efficient_frontier(mu_hat, Sigma_hat, n_points)
+    frontier_hat, _ = compute_efficient_frontier(mu_hat, Sigma_hat, n_points)
 
     records = []
     for w in frontier_hat["weights"]:
@@ -326,4 +330,130 @@ plot_5 = (
 )
 
 plot_5
+```
+
+## Exercise 6
+```{python}
+#| cache: true
+#| label: out of sample sharpe ratio of plug in
+def evaluate_tangency(T, mu, Sigma):
+    sim = simulate_returns(T, mu, Sigma)
+    mu_hat = sim.mean(axis=0)
+    Sigma_hat = np.cov(sim, rowvar=False)
+    
+    _, tangency_hat = compute_efficient_frontier(mu_hat, Sigma_hat)
+    w_hat = tangency_hat["weights"]
+    
+    mu_oos = w_hat @ mu
+    sigma_oos = np.sqrt(w_hat @ Sigma @ w_hat)
+    sharpe_oos = mu_oos / sigma_oos
+    
+    return {"mu_oos": mu_oos, "sigma_oos": sigma_oos, "sharpe_oos": sharpe_oos}
+
+T_values = [60, 120, 240, 1200]
+n_simulations = 500
+
+records = []
+for T in T_values:
+    for _ in range(n_simulations):
+        result = evaluate_tangency(T, mu, Sigma)
+        result["T"] = f"T = {T}"
+        records.append(result)
+
+oos_results = pd.DataFrame(records)
+
+true_sharpe = tangency["sharpe"]
+
+plot_6 = (
+    ggplot(oos_results, aes(x="sharpe_oos"))
+    + geom_histogram(bins=50, fill="lightblue", color="white")
+    + geom_vline(xintercept=true_sharpe, color="blue", size=1, linetype="dashed")
+    + geom_vline(xintercept=0, color="red", size=0.8, linetype="dashed")
+    + facet_wrap("T", scales="free_y")
+    + labs(
+        x="Out-of-sample Sharpe ratio",
+        y="Count",
+        title="Out-of-sample Sharpe ratio of plug-in tangency portfolio",
+        caption="Dashed blue: true tangency Sharpe. Dashed red: zero."
+    )
+    + theme_bw()
+)
+
+plot_6
+```
+
+```{python}
+
+
+def compute_portfolio_weights(mu_hat, Sigma_hat, sim, N):
+    iota = np.ones(N)
+    Sigma_hat_inv = np.linalg.inv(Sigma_hat)
+
+    w_tan = Sigma_hat_inv @ mu_hat / (iota @ Sigma_hat_inv @ mu_hat)
+    w_ew = iota / N
+    w_mv = Sigma_hat_inv @ iota / (iota @ Sigma_hat_inv @ iota)
+
+    def neg_sharpe(w):
+        mu_p = w @ mu_hat
+        sigma_p = np.sqrt(w @ Sigma_hat @ w)
+        return -mu_p / sigma_p
+
+    constraints = {"type": "eq", "fun": lambda w: np.sum(w) - 1}
+    bounds = [(0, None)] * N
+    result = minimize(neg_sharpe, iota / N, method="SLSQP", bounds=bounds, constraints=constraints)
+    w_constrained = result.x
+
+
+    return {
+        "Plug-in tangency": w_tan,
+        "Equal weight": w_ew,
+        "Minimum variance": w_mv,
+        "Constrained tangency": w_constrained,
+    }
+
+def evaluate_strategies(T, mu, Sigma, N):
+    sim = simulate_returns(T, mu, Sigma)
+    mu_hat = sim.mean(axis=0)
+    Sigma_hat = np.cov(sim, rowvar=False)
+
+    weights = compute_portfolio_weights(mu_hat, Sigma_hat, sim, N)
+
+    records = []
+    for name, w in weights.items():
+        mu_p = w @ mu
+        sigma_p = np.sqrt(w @ Sigma @ w)
+        sharpe = mu_p / sigma_p
+        records.append({"strategy": name, "mu_p": mu_p, "sigma_p": sigma_p, "sharpe": sharpe})
+
+    return records
+    
+T_values = [60, 120, 240, 1200]
+n_simulations = 500
+
+records = []
+for T in T_values:
+    for _ in range(n_simulations):
+        results = evaluate_strategies(T, mu, Sigma, N)
+        for r in results:
+            r["T"] = f"T = {T}"
+            records.append(r)
+
+strategy_results = pd.DataFrame(records)
+
+plot_7 = (
+    ggplot(strategy_results, aes(x="strategy", y="sharpe", fill="strategy"))
+    + geom_boxplot(alpha=0.7)
+    + geom_hline(yintercept=tangency["sharpe"], color="blue", linetype="dashed", size=0.8)
+    + facet_wrap("T")
+    + labs(
+        x="Strategy",
+        y="Out-of-sample Sharpe ratio",
+        title="Out-of-sample Sharpe ratios across strategies",
+        caption="Dashed blue: true tangency Sharpe."
+    )
+    + theme_bw()
+    + theme(axis_text_x=element_text(angle=45, ha="right"), legend_position="none")
+)
+
+plot_7
 ```
