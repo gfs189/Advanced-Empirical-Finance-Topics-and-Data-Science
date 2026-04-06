@@ -54,17 +54,11 @@ from scipy.optimize import minimize
 
 In this assigment we will look at the possiblility of using machine learning as a tool for financial gains through a model that predicts future returns of stocks. This assigment is inspired by the papers of @10.1093/rfs/hhaa009 and @10.1093/rfs/hhm014 which both explores how machine learning can used to predict stock returns. In the paper of @10.1093/rfs/hhaa009, they find, using a wide range of different machine learning model, that machine learning is a useful tool to predict stock returns and that the non-linear models outperform the linear models. Whereas the paper of @10.1093/rfs/hhm014 finds that machine learning models do not tend to outperform a simple historical mean model. Therefor we will try to reproduce the results of @10.1093/rfs/hhaa009. We do this by using the same data and machine learning models.
 
-## Exercise
+##
+In this first part we will download the data which is stored in a parquet file and contains 94 stock characteristics from @10.1093/rfs/hhaa009 and 13 macroeconomic variables from @10.1093/rfs/hhm014, 73 industry classifications, excess returns and lagged market capitalization. We start by preparing the data by removing observations before January 2000. Now we select 10 stock characsterisc and 4 macroecoonmic variables based on the paper of @10.1093/rfs/hhaa009. Here we select 
 
-1. Download daily adjusted prices for all constituents of three stocks: AAPL, MSFT, and BA for the period from January 1st, 2000 until December 31st, 2025 from Yahoo!Finance. Explicitly include the code you use to download the data into your report. Compute the daily returns for each of the tickers.
 
-```{python}
-import pandas as pd
-import numpy as np
-import tidyfinance as tf
-from plotnine import *
-from mizani.formatters import percent_format
-```
+
 
 ```{python} 
 #| echo: true
@@ -85,66 +79,13 @@ returns = (prices
 )
 ```
 
-1. Visualize the distribution of the daily returns.
+##
 
-```{python}
-#| label: fig-return-distribution
-#| fig-cap: Distribution of daily stock returns. 
+##
 
-returns_figure = (
-  ggplot(returns, aes(x="ret", fill="symbol")) +
-  geom_histogram(bins=100) +
-  labs(x="", y="",
-       fill ="") +
-  facet_wrap("symbol") +
-  scale_x_continuous(labels=percent_format()) +
-  theme_bw() +
-  theme(legend_position = "none")
-)
-returns_figure.draw()
-```
+##
 
-@fig-return-distribution shows the distribution of daily returns for the three assets.
-
-1. Compute the sample mean $\mu$ and the variance-covariance matrix $\Sigma$ of the returns.
-Which of the individual assets delivered the highest Sharpe ratio (assume the risk-free rate is zero) during the sample period?^[Whenever reporting performance measures, compute annualized values and clearly state how you calculated the measure.]
-The estimated moments may later be used for the construction of optimal portfolios (@Markowitz1952; @Merton1972)
-
-```{python}
-returns_matrix = (prices
-  .pivot(columns="symbol", 
-         values="adjusted_close", 
-         index="date")
-  .pct_change()
-  .dropna()
-)
-
-mu = np.array(returns_matrix.mean()).T
-sigma = np.array(returns_matrix.cov())
-
-sharpe_ratio = pd.DataFrame({"ticker": ticker,
-  "Sharpe": np.sqrt(250) * mu / np.sqrt(np.diag(sigma))})
-```
-
-**Answer: ** The asset with the highest annualized Sharpe-ratio, computed as 
-$$
-\sqrt{250}\frac{\hat\mu_i}{\hat\sigma_i},
-$$
-
-where $\hat\mu_i$ is the sample mean of asset $i$s dailies returns and $\hat\sigma_i$ is the standard deviation of asset $i$s dailys returns is `{python} sharpe_ratio.loc[sharpe_ratio['Sharpe'] == sharpe_ratio['Sharpe'].max(), 'ticker'].iloc[0]` with an annualized Sharpe-ratio of `{python} round(sharpe_ratio['Sharpe'].max(), 3)`. @tbl-sharpe-ratios illustrates all Sharpe ratios. 
-
-```{python}
-#| tbl-cap: Historical annualized Sharpe-ratios
-#| label: tbl-sharpe-ratios
-#| output: asis
-from great_tables import GT
-tbl = (
-    GT(sharpe_ratio)
-    .fmt_number(columns="Sharpe", decimals=3)
-)
-latex_tbl = tbl.as_latex()
-print(latex_tbl)
-```
+## Conclusion
 
 
 ## References
