@@ -50,33 +50,21 @@ from scipy.optimize import minimize
 ```
 
 
-## Quarto - a framework for reproducible research
-
 In this assigment we will look at the possiblility of using machine learning as a tool for financial gains through a model that predicts future returns of stocks. This assigment is inspired by the papers of @10.1093/rfs/hhaa009 and @10.1093/rfs/hhm014 which both explores how machine learning can used to predict stock returns. In the paper of @10.1093/rfs/hhaa009, they find, using a wide range of different machine learning model, that machine learning is a useful tool to predict stock returns and that the non-linear models outperform the linear models. Whereas the paper of @10.1093/rfs/hhm014 finds that machine learning models do not tend to outperform a simple historical mean model. Therefor we will try to reproduce the results of @10.1093/rfs/hhaa009. We do this by using the same data and machine learning models.
 
 ##
-In this first part we will download the data which is stored in a parquet file and contains 94 stock characteristics from @10.1093/rfs/hhaa009 and 13 macroeconomic variables from @10.1093/rfs/hhm014, 73 industry classifications, excess returns and lagged market capitalization. We start by preparing the data by removing observations before January 2000. Now we select 10 stock characsterisc and 4 macroecoonmic variables based on the paper of @10.1093/rfs/hhaa009. Here we select 
+In this first part we start by downloading the data which is stored in a parquet file. This contains 94 stock characteristics from @10.1093/rfs/hhaa009 and 13 macroeconomic variables from @10.1093/rfs/hhm014, 73 industry classifications, excess returns and lagged market capitalization. We start by preparing the data by removing observations before January 2000. Now we select 10 stock characsterisc and 4 macroecoonmic variables based on the paper of @10.1093/rfs/hhaa009 and @10.1093/rfs/hhm014 respectively. Here we select 3 variables for momemtum and reversal(short term reversal, 12 month momemtum, longer term momemtum), value(book to market ratio, earnings-to-price ratio), size(market equity, dollar volume) and profitablity(return on assets, gross profitability, investment-to-assets ratio). In terms of macroeconomic variables we select dividend-price ratio, earnings-price ratio, treasury bill rate(interest rate level) and term spread. These are chosen based on the findings in the 2 papers. 
+
+
 
 
 
 
 ```{python} 
-#| echo: true
 #| cache: true
+#| label: Downloading data 
 
-ticker = ["AAPL", "MSFT", "BA"]
-prices = tf.download_data(
-  domain="stock_prices", 
-  symbols=ticker,
-  start_date="2000-01-01", 
-  end_date="2025-12-31"
-)
 
-returns = (prices
-  .assign(ret=lambda x: x.groupby("symbol")["adjusted_close"].pct_change())
-  .get(["symbol", "date", "ret"])
-  .dropna(subset="ret")
-)
 ```
 
 ##
