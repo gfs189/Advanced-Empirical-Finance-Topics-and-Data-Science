@@ -68,11 +68,14 @@ In this first part we start by downloading the data which is stored in a parquet
 ```
 
 ##
+In this part we will look at 2 machine learning models: Tree-models and neural network. The tree-based model in nonparametric and the objecive is to minimize prediction error by splitting the data in regions that are as pure as possible and the model strucutre consistst of decision nodes and leafs which splits the data and at the end the model takes the mean of these final decisions. The hyperparameters of the tree-based model are the number of trees, maximum depth of the trees, minimum number of samples required to split a node. For the neural network tries to minimize a loss function using algorithms. This model consists of an input layer, hidden layer(s) with neurons, and an ouput layer. Here we tune number of hidden layers, activation function, connections of units, regularization and learning rate. 
+
 
 ##
+Now we translate the statistical forecasts into investments strategies and assses the models.
 
 ##
-
+In this final part we connect the results to financial theory. 
 ## Conclusion
 
 
