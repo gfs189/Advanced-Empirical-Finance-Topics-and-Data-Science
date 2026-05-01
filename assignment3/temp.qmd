@@ -1,0 +1,32 @@
+---
+title: Mandatory Assignment 1
+author: GFS189, RTL959
+date: today
+date-format: MMMM DD, YYYY
+execute: 
+  echo: false
+  warning: false
+bibliography: references.bib
+format:
+  pdf:
+    number-sections: true
+    colorlinks: true
+    geometry:
+      - top=20mm
+      - left=20mm
+      - bottom=20mm
+      - right=20mm
+    cite-method: natbib
+    biblio-style: apalike
+    lang: en
+    fontsize: 12pt
+    highlight-style: github-light
+---
+
+
+
+
+
+## References
+::::{#refs}
+::::
