@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pip install *)"
+      "Bash(pip install *)",
+      "Bash(where python *)",
+      "Bash(python -c \"import jupyter_cache; print\\('ok'\\)\")",
+      "Bash(\"C:/Users/schlu/OneDrive/Skrivebord/SKOLE/course-repository/.venv/Scripts/pip.exe\" install *)"
     ]
   }
 }

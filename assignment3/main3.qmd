@@ -34,6 +34,9 @@ from pathlib import Path
 import warnings
 import joblib
 from IPython.display import display, Markdown
+from itertools import product
+from scipy.stats import expon
+from scipy.optimize import minimize
 
 import tidyfinance as tf
 from plotnine import *
@@ -42,13 +45,12 @@ from mizani.formatters import percent_format
 from sklearn.covariance import LedoitWolf
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler
-from scipy.optimize import minimize
 
 warnings.filterwarnings("ignore")
 
 _dir        = Path(".")
-PARQUET_PATH = Path(r"C:\Users\schlu\Desktop\PYTHON\Datascience\Advanced-Empirical-Finance-Topics-and-Data-Science\assignment2\stock_characteristics_monthly.parquet")
-MODEL_DIR    = Path(r"C:\Users\schlu\Desktop\PYTHON\Datascience\Advanced-Empirical-Finance-Topics-and-Data-Science\Assignment 2 CK")
+PARQUET_PATH = Path(r"C:\Users\schlu\OneDrive\Skrivebord\SKOLE\KODE\Advanced-Empirical-Finance-Topics-and-Data-Science\assignment2\stock_characteristics_monthly.parquet")
+MODEL_DIR    = Path(r"C:\Users\schlu\OneDrive\Skrivebord\SKOLE\KODE\Advanced-Empirical-Finance-Topics-and-Data-Science\Ny assignment 2")
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 GAMMA           = 4       # Risk aversion (fixed throughout)
@@ -56,6 +58,7 @@ LAMBDA_TC       = 0.1     # Transaction cost parameter (1000 bp = 0.10)
 COV_WINDOW      = 60      # Rolling window for covariance estimation (months)
 MIN_OBS         = 24      # Minimum valid observations required per stock
 MONTHS_PER_YEAR = 12
+MAX_N_STOCKS    = 300     # Universe cap: top stocks by mktcap — reduces O(N³) to O(2.7×10⁷)
 
 # Formation dates: Dec 2009 – Nov 2024 → portfolio returns Jan 2010 – Dec 2024
 FORM_START = pd.Timestamp("2009-12-01")
@@ -91,49 +94,10 @@ def sic2_to_division(sic2_series):
     return div.astype(str).where(s.notna(), "Other")
 
 
-# ── Helper: prepare one month's feature DataFrame (same pipeline as MA2) ─────
-def prepare_features(df_raw, target_date):
-    """
-    Return a DataFrame (index=permno, columns=59 model features) for target_date.
-    Replicates the MA2 feature engineering exactly so the RF pipeline applies correctly.
-    """
-    sub = df_raw.loc[df_raw["date"] == target_date, ID_COLS + CHAR_COLS + MACRO_COLS].copy()
-    if sub.empty:
-        return None
-
-    # Cross-sectional median imputation for stock characteristics
-    cs_med = sub[CHAR_COLS].median()
-    sub[CHAR_COLS] = sub[CHAR_COLS].fillna(cs_med)
-
-    # Forward/back-fill macro (constant across stocks within a month)
-    sub[MACRO_COLS] = sub[MACRO_COLS].ffill().bfill()
-    sub = sub.dropna(subset=MACRO_COLS)
-    if sub.empty:
-        return None
-
-    # SIC dummies — fixed categories guarantee the same 9 columns every month
-    sub["sic_division"] = sic2_to_division(sub["sic2"])
-    sic_cat = pd.Categorical(sub["sic_division"], categories=SIC_CATS_SORTED)
-    sic_dummies = pd.get_dummies(sic_cat, prefix="sic", drop_first=True, dtype=float)
-    sic_dummies.index = sub.index
-
-    # Interaction terms: 10 characteristics × 4 macro = 40 columns
-    interaction_cols = []
-    for char in CHAR_COLS:
-        for macro in MACRO_COLS:
-            col = f"{char}_x_{macro}"
-            sub[col] = sub[char] * sub[macro]
-            interaction_cols.append(col)
-
-    feature_cols = CHAR_COLS + interaction_cols
-    X = pd.concat(
-        [sub[["permno"]].reset_index(drop=True),
-         sub[feature_cols].reset_index(drop=True),
-         sic_dummies.reset_index(drop=True)],
-        axis=1,
-    ).set_index("permno")
-
-    return X.fillna(0.0)   # very rare after imputation; avoids RF NaN issues
+# ── Pre-compute interaction column names once (used in ex4-predictions) ───────
+# product(CHAR_COLS, MACRO_COLS) gives all 40 pairs in the same order as the
+# nested for-loop used during MA2 training, so RF column names match exactly.
+IXN_COLS = [f"{c}_x_{m}" for c, m in product(CHAR_COLS, MACRO_COLS)]
 ```
 
 ```{python}
@@ -141,7 +105,8 @@ def prepare_features(df_raw, target_date):
 #| cache: true
 
 # ── Load parquet (stock characteristics 2000–2024) ────────────────────────────
-df_raw = pd.read_parquet(PARQUET_PATH)
+_needed_cols = ID_COLS + CHAR_COLS + MACRO_COLS
+df_raw = pd.read_parquet(PARQUET_PATH, columns=_needed_cols)
 df_raw["date"] = pd.to_datetime(df_raw["date"]) + pd.offsets.MonthEnd(0)
 
 # ── Wide-form returns matrix: rows=month-end dates, cols=permnos ──────────────
@@ -283,66 +248,91 @@ Hence $\omega^*_{t+1}$ is a **convex combination** of the mean-variance portfoli
 ```{python}
 #| label: ex2-functions
 
-# ── Core portfolio functions ──────────────────────────────────────────────────
+import quadprog
 
-def compute_weights(mu, Sigma, gamma, lam, w_prev):
+# ── Core portfolio functions (tidy-finance pattern) ───────────────────────────
+
+def prefactor_sigma(Sigma, mu):
     """
-    Closed-form TC-adjusted MV with budget constraint ι'ω = 1.
-
-    Equivalent problem: max ω'μ̃ - (γ̃/2)ω'Σω  s.t. ι'ω=1
-      μ̃ = μ + 2λΣω⁺,  γ̃ = γ + 2λ
-    FOC + budget constraint → unique closed form below.
+    Solve Σ x = [μ | ι] in one LU factorisation and return the derived scalars.
+    Following tidy-finance compute_efficient_weight: factorise Σ once per month,
+    then each strategy's weights are O(N) vector operations.
+    Returns (Si_mu, Si_iota, iota_Si_mu, iota_Si_iota).
     """
-    N = len(mu)
-    iota        = np.ones(N)
-    gamma_tilde = gamma + 2.0 * lam
-    mu_tilde    = mu + 2.0 * lam * (Sigma @ w_prev)
-
+    N    = len(mu)
+    iota = np.ones(N)
     try:
-        Sim = np.linalg.solve(Sigma, mu_tilde)
-        SiI = np.linalg.solve(Sigma, iota)
+        sol = np.linalg.solve(Sigma, np.column_stack([mu, iota]))
     except np.linalg.LinAlgError:
         Si  = np.linalg.pinv(Sigma)
-        Sim = Si @ mu_tilde
-        SiI = Si @ iota
+        sol = Si @ np.column_stack([mu, iota])
+    Si_mu, Si_iota = sol[:, 0], sol[:, 1]
+    return Si_mu, Si_iota, float(iota @ Si_mu), float(iota @ Si_iota)
 
-    phi = (iota @ Sim - gamma_tilde) / (iota @ SiI)   # Lagrange multiplier
 
-    return (1.0 / gamma_tilde) * (Sim - phi * SiI)
+def compute_efficient_weight(Si_mu, iota_Si_mu, Si_iota, iota_Si_iota,
+                              gamma, lam=0.0, w_prev=None):
+    """
+    O(N) closed-form TC-adjusted MV using pre-factored Σ⁻¹μ and Σ⁻¹ι.
+
+    Tidy-finance key identity: Σ⁻¹μ̃ = Σ⁻¹μ + 2λω⁺
+    because μ̃ = μ + 2λΣω⁺  →  Σ⁻¹μ̃ = Σ⁻¹μ + 2λω⁺.
+    So once Σ is factorised via prefactor_sigma(), each strategy costs O(N).
+    """
+    N = len(Si_mu)
+    if lam == 0.0 or w_prev is None:
+        w_prev, lam = np.zeros(N), 0.0
+    gamma_tilde      = gamma + 2.0 * lam
+    Si_mu_tilde      = Si_mu + 2.0 * lam * w_prev
+    iota_Si_mu_tilde = iota_Si_mu + 2.0 * lam        # ι'ω⁺ = 1 always
+    phi              = (iota_Si_mu_tilde - gamma_tilde) / iota_Si_iota
+    return (1.0 / gamma_tilde) * (Si_mu_tilde - phi * Si_iota)
 
 
 def compute_constrained_weights(mu, Sigma, gamma=GAMMA):
     """
-    Long-only MV: max ω'μ - (γ/2)ω'Σω  s.t. ι'ω=1, ω≥0.
-    Solved with cvxpy/OSQP when available (fast for large N); scipy SLSQP otherwise.
-    """
-    N  = len(mu)
-    w0 = np.ones(N) / N
+    Long-only MV via quadprog — the Python equivalent of R's solve.QP from
+    tidy-finance.org.  Falls back to cvxpy/OSQP then scipy SLSQP if needed.
 
-    # ── cvxpy path (fast quadratic program) ──────────────────────────────────
+    QP form:  min  ½ w'(γΣ)w − μ'w   s.t.  ι'w = 1,  w ≥ 0
+    """
+    N    = len(mu)
+    iota = np.ones(N)
+    w0   = iota / N
+
+    # ── quadprog (R solve.QP equivalent, fastest) ─────────────────────────────
+    try:
+        G = (gamma * Sigma + 1e-8 * np.eye(N)).astype(np.float64)
+        a = mu.astype(np.float64)
+        C = np.column_stack([iota, np.eye(N)]).astype(np.float64)
+        b = np.concatenate([[1.0], np.zeros(N)]).astype(np.float64)
+        w = quadprog.solve_qp(G, a, C, b, meq=1)[0]
+        w = np.maximum(w, 0.0); s = w.sum()
+        return w / s if s > 1e-12 else w0
+    except Exception:
+        pass
+
+    # ── cvxpy / OSQP fallback ────────────────────────────────────────────────
     try:
         import cvxpy as cp
-        w   = cp.Variable(N)
-        obj = cp.Maximize(mu @ w - (gamma / 2.0) * cp.quad_form(w, cp.psd_wrap(Sigma)))
+        w    = cp.Variable(N)
+        obj  = cp.Maximize(mu @ w - (gamma / 2.0) * cp.quad_form(w, cp.psd_wrap(Sigma)))
         prob = cp.Problem(obj, [cp.sum(w) == 1, w >= 0])
         prob.solve(solver=cp.OSQP, warm_start=True, eps_abs=1e-8, eps_rel=1e-8, verbose=False)
         if prob.status in ("optimal", "optimal_inaccurate") and w.value is not None:
-            out = np.maximum(w.value, 0.0)
-            s   = out.sum()
+            out = np.maximum(w.value, 0.0); s = out.sum()
             return out / s if s > 1e-12 else w0
     except Exception:
         pass
 
-    # ── scipy SLSQP fallback ──────────────────────────────────────────────────
-    def neg_u(w):  return -(w @ mu - (gamma / 2.0) * w @ Sigma @ w)
-    def grad(w):   return -(mu - gamma * Sigma @ w)
-
-    res = minimize(
-        neg_u, w0, jac=grad, method="SLSQP",
-        bounds=[(0.0, None)] * N,
-        constraints=[{"type":"eq","fun": lambda w: w.sum()-1,"jac": lambda w: np.ones(N)}],
-        options={"maxiter":1000,"ftol":1e-9},
-    )
+    # ── scipy SLSQP last resort ───────────────────────────────────────────────
+    def neg_u(w): return -(w @ mu - (gamma / 2.0) * w @ Sigma @ w)
+    def grad(w):  return -(mu - gamma * Sigma @ w)
+    res = minimize(neg_u, w0, jac=grad, method="SLSQP",
+                   bounds=[(0.0, None)] * N,
+                   constraints=[{"type": "eq", "fun": lambda w: w.sum() - 1,
+                                  "jac": lambda w: iota}],
+                   options={"maxiter": 1000, "ftol": 1e-9})
     out = np.maximum(res.x if res.success else w0, 0.0)
     s   = out.sum()
     return out / s if s > 1e-12 else w0
@@ -366,37 +356,98 @@ For $\hat\Sigma_t^{LW}$ we apply Ledoit-Wolf (2004) shrinkage to the rolling **s
 def estimate_factor_cov(R, F):
     """
     Factor model covariance Σ = B·ΣF·B' + diag(σ²_ε).
-
-    Parameters: R (T×N) excess returns, F (T×K) factor returns (aligned rows).
+    Returns full N×N matrix — used only for the ex3 comparison plot.
+    Backtest uses estimate_factor_components + woodbury_factor instead.
     """
     T, N = R.shape
     K    = F.shape[1]
-    X_f  = np.column_stack([np.ones(T), F])   # T × (K+1)
-
-    # Solve all N stocks at once via normal equations (4×4 system, not N separate solves)
-    XtX  = X_f.T @ X_f          # (K+1) × (K+1)
-    XtR  = X_f.T @ R            # (K+1) × N
-    coef = np.linalg.solve(XtX, XtR)   # (K+1) × N
-    betas     = coef[1:].T              # N × K
-    resid     = R - X_f @ coef         # T × N
-    resid_var = np.var(resid, axis=0, ddof=K + 1)
-
-    Sigma_F = np.cov(F.T, ddof=1)
-    Sigma   = betas @ Sigma_F @ betas.T + np.diag(resid_var)
-
-    # Regularise numerical non-PD
-    try:
-        lmin = np.linalg.eigvalsh(Sigma).min()
-        if lmin < 1e-10:
-            Sigma += (abs(lmin) + 1e-8) * np.eye(N)
-    except np.linalg.LinAlgError:
-        Sigma += 1e-6 * np.eye(N)
-
+    X_f  = np.column_stack([np.ones(T), F])
+    coef = np.linalg.solve(X_f.T @ X_f, X_f.T @ R)
+    betas     = coef[1:].T
+    resid_var = np.var(R - X_f @ coef, axis=0, ddof=K + 1)
+    Sigma_F   = np.cov(F.T, ddof=1)
+    Sigma     = betas @ Sigma_F @ betas.T + np.diag(resid_var)
+    lmin = np.linalg.eigvalsh(Sigma).min()
+    if lmin < 1e-10:
+        Sigma += (abs(lmin) + 1e-8) * np.eye(N)
     return Sigma
 
 
+def estimate_factor_components(R, F):
+    """Return (betas N×K, Sigma_F K×K, resid_var N) without forming Σ."""
+    T, N = R.shape
+    K    = F.shape[1]
+    X_f  = np.column_stack([np.ones(T), F])
+    coef = np.linalg.solve(X_f.T @ X_f, X_f.T @ R)
+    betas     = coef[1:].T
+    resid_var = np.maximum(np.var(R - X_f @ coef, axis=0, ddof=K + 1), 1e-8)
+    return betas, np.cov(F.T, ddof=1), resid_var
+
+
+def woodbury_factor(betas, Sigma_F, resid_var, V):
+    """
+    (B·ΣF·B' + D)⁻¹·V via Woodbury identity — O(NK²) instead of O(N³).
+    Core system is K×K = 3×3. No N×N matrix formed or stored.
+    D⁻¹v − D⁻¹B·(ΣF⁻¹ + B'D⁻¹B)⁻¹·B'D⁻¹v
+    """
+    D_inv   = 1.0 / resid_var
+    D_inv_B = D_inv[:, None] * betas                         # N×K
+    M       = np.linalg.inv(Sigma_F) + betas.T @ D_inv_B    # K×K  ← tiny
+    D_inv_V = D_inv[:, None] * V                             # N×m
+    return D_inv_V - D_inv_B @ np.linalg.solve(M, betas.T @ D_inv_V)
+
+
+def lw_components(R_vals, lw_alpha):
+    """
+    Decompose Σ_LW = U'U + γI where U is T×N (T=60).
+    U = sqrt((1−α)/(T−1)) · R_centred,  γ = α · trace(S)/N.
+    Never forms the N×N matrix — caller uses woodbury_lw for solves.
+    """
+    R_c   = R_vals - R_vals.mean(axis=0)
+    T     = R_c.shape[0]
+    gamma = lw_alpha * np.var(R_c, axis=0, ddof=1).mean()
+    U     = np.sqrt((1.0 - lw_alpha) / (T - 1)) * R_c       # T×N
+    return U, gamma
+
+
+def woodbury_lw(U, gamma, V):
+    """
+    (U'U + γI)⁻¹·V via Woodbury — O(T²N) instead of O(N³).
+    Core system is T×T = 60×60.  Formula:
+    V/γ − U'·(γI + UU')⁻¹·(UV)/γ
+    """
+    core = gamma * np.eye(U.shape[0]) + U @ U.T    # T×T  ← the only inversion
+    return V / gamma - (U.T @ np.linalg.solve(core, U @ V)) / gamma
+
+
+def simplex_project(v):
+    """Project onto {w ≥ 0, Σw = 1} in O(N log N)."""
+    u    = np.sort(v)[::-1]
+    cssv = np.cumsum(u) - 1.0
+    rho  = np.where(u > cssv / np.arange(1, len(v) + 1))[0][-1]
+    return np.maximum(v - cssv[rho] / (rho + 1), 0.0)
+
+
+def constrained_pg(mu, U, gamma, gamma_mv, n_iter=600, tol=1e-12):
+    """
+    Long-only MV via projected gradient + Woodbury Σ·w products.
+    Each iteration O(TN) — no N×N QP, no N×N matrix.
+    LW shrinkage keeps condition number low → fast convergence.
+    """
+    N    = U.shape[1]
+    step = 1.0 / (gamma_mv * (np.linalg.norm(U, ord=2) ** 2 + gamma))
+    w    = np.ones(N) / N
+    for _ in range(n_iter):
+        g     = gamma_mv * (U.T @ (U @ w) + gamma * w) - mu
+        w_new = simplex_project(w - step * g)
+        if np.dot(w_new - w, w_new - w) < tol:
+            break
+        w = w_new
+    return w
+
+
 def min_var_weights(Sigma):
-    """Global minimum-variance portfolio (closed form)."""
+    """Global minimum-variance portfolio (closed form) — used in ex3 plot."""
     iota = np.ones(Sigma.shape[0])
     try:
         SiI = np.linalg.solve(Sigma, iota)
@@ -459,21 +510,55 @@ We use the Random Forest pipeline trained in MA2 to generate $\hat\mu_t$ for eve
 #| label: ex4-predictions
 #| cache: true
 
-# Formation dates: one month before each portfolio-return month
 formation_dates = pd.date_range(start=FORM_START, end=FORM_END, freq="ME")
 
-all_mu = []
-for t in formation_dates:
-    X_t = prepare_features(df_raw, t)
-    if X_t is None or X_t.empty:
-        continue
-    # Pass DataFrame so the ColumnTransformer uses named columns (same as MA2 training)
-    mu_hat = rf_model.predict(X_t)
-    all_mu.append(
-        pd.DataFrame({"permno": X_t.index, "date": t, "mu_hat": mu_hat})
-    )
+# ── 1. Filter df_raw to all formation dates in one pass ───────────────────────
+df_form = (
+    df_raw
+    .loc[df_raw["date"].isin(set(formation_dates)), ID_COLS + CHAR_COLS + MACRO_COLS]
+    .copy()
+    .sort_values(["date", "permno"])
+    .reset_index(drop=True)
+)
 
-mu_predictions = pd.concat(all_mu, ignore_index=True)
+# ── 2. Imputation — one vectorised groupby instead of 180 per-month loops ─────
+cs_med = df_form.groupby("date")[CHAR_COLS].transform("median")
+df_form[CHAR_COLS] = df_form[CHAR_COLS].fillna(cs_med)
+
+# Macros are date-level (same for every stock in a month): fill within month,
+# then forward-fill any month that was entirely missing.
+df_form[MACRO_COLS] = df_form.groupby("date")[MACRO_COLS].transform("first")
+df_form[MACRO_COLS] = df_form[MACRO_COLS].ffill()
+df_form = df_form.dropna(subset=MACRO_COLS).reset_index(drop=True)
+
+# ── 3. SIC dummies ────────────────────────────────────────────────────────────
+df_form["sic_division"] = sic2_to_division(df_form["sic2"])
+sic_dummies = pd.get_dummies(
+    pd.Categorical(df_form["sic_division"], categories=SIC_CATS_SORTED),
+    prefix="sic", drop_first=True, dtype=float,
+)
+
+# ── 4. Interaction terms via numpy broadcasting — no Python loop ───────────────
+# IXN_COLS uses product(CHAR_COLS, MACRO_COLS) — defined in setup, same order
+# as the nested for-loop used in MA2 training so RF column names match exactly.
+# (N, 10, 1) × (N, 1, 4) → (N, 10, 4) → reshape to (N, 40): all 40 products
+# computed in a single numpy operation instead of 40 Python assignments.
+chars_arr = df_form[CHAR_COLS].to_numpy()
+macro_arr = df_form[MACRO_COLS].to_numpy()
+ixn_arr   = (chars_arr[:, :, None] * macro_arr[:, None, :]).reshape(len(df_form), -1)
+
+# ── 5. Assemble and predict in a single batch call ────────────────────────────
+X_all = pd.concat([
+    df_form[["permno", "date"] + CHAR_COLS].reset_index(drop=True),
+    pd.DataFrame(ixn_arr, columns=IXN_COLS),
+    sic_dummies.reset_index(drop=True),
+], axis=1).fillna(0.0)
+
+# One rf_model.predict call across all months — ~180× less Python overhead
+# than the previous per-month loop.
+mu_hat_all = rf_model.predict(X_all.drop(columns=["permno", "date"]))
+
+mu_predictions = X_all[["permno", "date"]].assign(mu_hat=mu_hat_all)
 ```
 
 ## Exercise 5: Portfolio Backtest
@@ -488,65 +573,63 @@ Monthly turnover follows @hautsch2019 equation 46: $\mathrm{TO}_t = \sum_i|\omeg
 #| label: ex5-backtest
 #| cache: true
 
-def get_w_plus(prev_w, prev_permnos, curr_permnos, t):
-    """
-    Pre-rebalancing weight ω_t^+ for the current universe.
-    Drifts previous weights by this month's excess returns; new entries get 0.
-    """
-    N = len(curr_permnos)
-    if prev_w is None or prev_permnos is None:
-        return np.ones(N) / N
+# ── Pre-computed lookups ───────────────────────────────────────────────────────
+# Universe capped to top MAX_N_STOCKS by lagged market cap: reduces N from
+# ~1000 to 300, cutting O(N³) linear-algebra cost by 37× before Woodbury.
+univ_mktcap_dict = (
+    universe_pq
+    .sort_values("mktcap_lag", ascending=False)
+    .groupby("date")
+    .head(MAX_N_STOCKS)
+    .groupby("date")["permno"]
+    .apply(np.array)
+    .to_dict()
+)
+rw_di      = returns_wide.index
+rw_col_set = set(returns_wide.columns)
 
-    curr_idx = {p: i for i, p in enumerate(curr_permnos)}
-    curr_set = set(curr_permnos)
-    w_plus   = np.zeros(N)
-
-    for i, p in enumerate(prev_permnos):
-        if p in curr_set:
-            if t in returns_wide.index and p in returns_wide.columns:
-                r = returns_wide.at[t, p]
-                w_plus[curr_idx[p]] = prev_w[i] * (1.0 + r) if not np.isnan(r) else prev_w[i]
-            else:
-                w_plus[curr_idx[p]] = prev_w[i]
-
-    total = w_plus.sum()
-    return w_plus / total if total > 1e-12 else np.ones(N) / N
-
-
-# Pre-index mu_predictions for O(1) per-month lookup (avoids full DataFrame filter each iteration)
 mu_dict = {
     date: grp.set_index("permno")["mu_hat"]
     for date, grp in mu_predictions.groupby("date")
 }
 
+
+def get_w_plus_vec(prev_w, prev_permnos, curr_permnos, drift):
+    N = len(curr_permnos)
+    if prev_w is None or prev_permnos is None:
+        return np.ones(N) / N
+    prev_ser = pd.Series(prev_w, index=prev_permnos)
+    drifted  = prev_ser * drift.reindex(prev_permnos, fill_value=1.0)
+    w_plus   = drifted.reindex(curr_permnos, fill_value=0.0).values
+    total    = w_plus.sum()
+    return w_plus / total if total > 1e-12 else np.ones(N) / N
+
+
 # ── Backtest loop ─────────────────────────────────────────────────────────────
 formation_dates = pd.date_range(start=FORM_START, end=FORM_END, freq="ME")
 
 results      = []
-prev_weights = {s: None for s in ["naive","tc_mv","tc_mv_lw","constrained"]}
+prev_weights = {s: None for s in ["naive", "tc_mv", "tc_mv_lw", "constrained"]}
 prev_permnos = None
 
 for idx, t in enumerate(formation_dates):
 
-    # ── 1. Universe at formation month t ─────────────────────────────────────
-    permnos_t = universe_pq.loc[universe_pq["date"] == t, "permno"].values
+    # ── 1. Universe: top MAX_N_STOCKS by mktcap (O(1) lookup) ────────────────
+    permnos_t = univ_mktcap_dict.get(t, np.array([]))
     if len(permnos_t) < 10:
         continue
 
-    # ── 2. Rolling 60-month return window (ends at t, inclusive) ─────────────
-    avail = returns_wide.index[returns_wide.index <= t]
-    if len(avail) < MIN_OBS:
+    # ── 2. Rolling 60-month window via binary search ──────────────────────────
+    pos = int(rw_di.searchsorted(t, side="right"))
+    if pos < MIN_OBS:
         continue
-    win_dates = avail[-COV_WINDOW:]
+    win_dates = rw_di[max(0, pos - COV_WINDOW): pos]
 
-    # Restrict to current universe stocks present in returns_wide
-    permnos_t = np.array([p for p in permnos_t if p in returns_wide.columns])
+    permnos_t = permnos_t[np.isin(permnos_t, list(rw_col_set))]
     if len(permnos_t) < 10:
         continue
 
-    R_win = returns_wide.loc[win_dates, permnos_t]
-
-    # Require ≥ MIN_OBS valid obs per stock, then drop stocks with any NaN
+    R_win     = returns_wide.loc[win_dates, permnos_t]
     valid     = R_win.notna().sum() >= MIN_OBS
     permnos_t = permnos_t[valid.values]
     R_win     = R_win[permnos_t].dropna(axis=1)
@@ -555,75 +638,102 @@ for idx, t in enumerate(formation_dates):
     if R_win.shape[0] < MIN_OBS or R_win.shape[1] < 10:
         continue
 
-    N = R_win.shape[1]
+    N      = R_win.shape[1]
+    R_vals = R_win.values
 
-    # ── 3. Factor data aligned to the return window ───────────────────────────
+    # ── 3. Factor data ────────────────────────────────────────────────────────
     F_win = factors_ff3.reindex(R_win.index).values
     if np.isnan(F_win).any():
         continue
-    R_vals = R_win.values
 
-    # ── 4. Covariance estimates ───────────────────────────────────────────────
-    Sigma_t    = estimate_factor_cov(R_vals, F_win)
-    lw_fit     = LedoitWolf(assume_centered=False)
+    # ── 4. Covariance — Woodbury components only, no N×N matrix ──────────────
+    # Factor model Σ = B·ΣF·B' + D: store (betas, Sigma_F, resid_var).
+    # woodbury_factor solves Σ⁻¹v in O(NK²) with K=3 — core is 3×3.
+    betas_t, Sigma_F_t, resid_var_t = estimate_factor_components(R_vals, F_win)
+
+    # Ledoit-Wolf Σ_LW = U'U + γI: store (U T×N, gamma scalar).
+    # woodbury_lw solves Σ_LW⁻¹v in O(T²N) — core is T×T = 60×60.
+    lw_fit       = LedoitWolf(assume_centered=False)
     lw_fit.fit(R_vals)
-    Sigma_LW_t = lw_fit.covariance_
+    U_t, gamma_t = lw_components(R_vals, lw_fit.shrinkage_)
 
     # ── 5. Expected returns ───────────────────────────────────────────────────
-    mu_series = mu_dict.get(t, pd.Series(dtype=float))
-    mu_t      = mu_series.reindex(permnos_t)
-    mu_t      = mu_t.fillna(mu_t.mean()).values   # fallback: cross-sectional mean
+    mu_series    = mu_dict.get(t, pd.Series(dtype=float))
+    mu_reindexed = mu_series.reindex(permnos_t)
+    mu_t         = mu_reindexed.fillna(mu_reindexed.mean()).values
 
-    # ── 6. Pre-rebalancing weights (one per strategy) ────────────────────────
-    wp_mv  = get_w_plus(prev_weights["tc_mv"],      prev_permnos, permnos_t, t)
-    wp_lw  = get_w_plus(prev_weights["tc_mv_lw"],   prev_permnos, permnos_t, t)
-    wp_c   = get_w_plus(prev_weights["constrained"], prev_permnos, permnos_t, t)
-    wp_n   = get_w_plus(prev_weights["naive"],       prev_permnos, permnos_t, t)
+    # ── 6. Pre-rebalancing weights ────────────────────────────────────────────
+    if pos > 0 and rw_di[pos - 1] == t:
+        drift = 1.0 + returns_wide.iloc[pos - 1].fillna(0.0)
+    else:
+        drift = pd.Series(1.0, index=returns_wide.columns)
 
-    # ── 7. Optimal weights ────────────────────────────────────────────────────
-    w_naive = np.ones(N) / N
+    wp_mv = get_w_plus_vec(prev_weights["tc_mv"],        prev_permnos, permnos_t, drift)
+    wp_lw = get_w_plus_vec(prev_weights["tc_mv_lw"],     prev_permnos, permnos_t, drift)
+    wp_c  = get_w_plus_vec(prev_weights["constrained"],   prev_permnos, permnos_t, drift)
+    wp_n  = get_w_plus_vec(prev_weights["naive"],         prev_permnos, permnos_t, drift)
 
+    # ── 7. Weights ────────────────────────────────────────────────────────────
+    iota    = np.ones(N)
+    V       = np.column_stack([mu_t, iota])
+    w_naive = iota / N
+
+    # Factor Σ: one Woodbury solve (3×3 core) → prefactors for TC-MV
     try:
-        w_tc_mv = compute_weights(mu_t, Sigma_t,    GAMMA, LAMBDA_TC, wp_mv)
+        sol_t          = woodbury_factor(betas_t, Sigma_F_t, resid_var_t, V)
+        Si_mu_t, Si_iota_t = sol_t[:, 0], sol_t[:, 1]
+        w_tc_mv = compute_efficient_weight(
+            Si_mu_t, float(Si_mu_t.sum()), Si_iota_t, float(Si_iota_t.sum()),
+            GAMMA, LAMBDA_TC, wp_mv)
     except Exception:
         w_tc_mv = w_naive.copy()
 
+    # LW Σ: one Woodbury solve (60×60 core) → prefactors for TC-MV-LW
     try:
-        w_tc_lw = compute_weights(mu_t, Sigma_LW_t, GAMMA, LAMBDA_TC, wp_lw)
+        sol_lw          = woodbury_lw(U_t, gamma_t, V)
+        Si_mu_lw, Si_iota_lw = sol_lw[:, 0], sol_lw[:, 1]
+        w_tc_lw = compute_efficient_weight(
+            Si_mu_lw, float(Si_mu_lw.sum()), Si_iota_lw, float(Si_iota_lw.sum()),
+            GAMMA, LAMBDA_TC, wp_lw)
     except Exception:
         w_tc_lw = w_naive.copy()
 
+    # Constrained: projected gradient — O(TN) per iter, no N×N QP at all
     try:
-        w_con   = compute_constrained_weights(mu_t, Sigma_LW_t, GAMMA)
+        w_con = constrained_pg(mu_t, U_t, gamma_t, GAMMA)
     except Exception:
-        w_con   = w_naive.copy()
+        w_con = w_naive.copy()
 
-    # ── 8. Next-month realised excess returns ─────────────────────────────────
-    future = returns_wide.index[returns_wide.index > t]
-    if len(future) == 0:
+    # ── 8. Next-month returns ─────────────────────────────────────────────────
+    if pos >= len(rw_di):
         break
-    t_next = future[0]
+    t_next = rw_di[pos]
     r_next = returns_wide.loc[t_next, permnos_t].fillna(0.0).values
 
-    # ── 9. Quadratic TC and turnover ──────────────────────────────────────────
-    def qtc(w, wp, S):
-        d = w - wp
-        return float(LAMBDA_TC * d @ S @ d)
+    # ── 9. TC and turnover — Woodbury quadratic forms, no N×N multiply ────────
+    # Factor: d'Σd = (B'd)'ΣF(B'd) + resid_var·d²  →  O(NK²)
+    # LW:     d'Σ_LW·d = ‖Ud‖² + γ‖d‖²             →  O(TN)
+    def qtc_f(w, wp):
+        d = w - wp; Bd = betas_t.T @ d
+        return float(LAMBDA_TC * (Bd @ Sigma_F_t @ Bd + resid_var_t @ (d ** 2)))
 
-    def to_(w, wp):
-        return float(np.abs(w - wp).sum())
+    def qtc_lw(w, wp):
+        d = w - wp; Ud = U_t @ d
+        return float(LAMBDA_TC * (Ud @ Ud + gamma_t * (d @ d)))
+
+    def to_(w, wp): return float(np.abs(w - wp).sum())
 
     results.append({
-        "date":          t_next,       # return month (Jan 2010 – Dec 2024)
-        "N":             N,
-        "r_naive":       float(w_naive @ r_next) - qtc(w_naive, wp_n,  Sigma_LW_t),
-        "r_tc_mv":       float(w_tc_mv @ r_next) - qtc(w_tc_mv,  wp_mv, Sigma_t),
-        "r_tc_mv_lw":   float(w_tc_lw  @ r_next) - qtc(w_tc_lw,  wp_lw, Sigma_LW_t),
-        "r_constrained": float(w_con   @ r_next) - qtc(w_con,    wp_c,  Sigma_LW_t),
-        "to_naive":      to_(w_naive,  wp_n),
-        "to_tc_mv":      to_(w_tc_mv,  wp_mv),
-        "to_tc_mv_lw":  to_(w_tc_lw,  wp_lw),
-        "to_constrained": to_(w_con,   wp_c),
+        "date":           t_next,
+        "N":              N,
+        "r_naive":        float(w_naive  @ r_next) - qtc_lw(w_naive,  wp_n),
+        "r_tc_mv":        float(w_tc_mv  @ r_next) - qtc_f( w_tc_mv,  wp_mv),
+        "r_tc_mv_lw":    float(w_tc_lw  @ r_next) - qtc_lw(w_tc_lw,  wp_lw),
+        "r_constrained":  float(w_con    @ r_next) - qtc_lw(w_con,    wp_c),
+        "to_naive":       to_(w_naive,  wp_n),
+        "to_tc_mv":       to_(w_tc_mv,  wp_mv),
+        "to_tc_mv_lw":   to_(w_tc_lw,  wp_lw),
+        "to_constrained": to_(w_con,    wp_c),
     })
 
     prev_weights = {
