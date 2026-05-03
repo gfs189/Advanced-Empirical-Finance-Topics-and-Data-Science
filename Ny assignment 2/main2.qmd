@@ -26,7 +26,7 @@ format:
 ```{python}
 #| label: setup
 
-# ── All packages loaded at the top ───────────────────────────────────────────
+# We import the required packages ─────────────────────────────────────────── 
 import pandas as pd
 import numpy as np
 import tidyfinance as tf
@@ -42,13 +42,14 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_squared_error
 from tidyfinance.core import assign_portfolio, compute_breakpoints, breakpoint_options
+import joblib
 
-# _dir resolves to the folder containing this .qmd file.
-# Quarto sets the working directory to the document folder at render time,
+# the _dir resolves to the folder containing this .qmd file.
+# Then quarto sets the working directory to the document folder at render time,
 # so all relative paths resolve correctly on any machine.
 _dir = Path(".")
 
-# ── Named constants ───────────────────────────────────────────────────────────
+# ── Named constants
 MONTHS_PER_YEAR      = 12      # Annualisation factor for monthly returns
 N_PORTFOLIOS         = 10      # Number of decile portfolios
 WINSORIZE_CUT        = 0.025   # Tail fraction for winsorisation (2.5% each side)
@@ -62,7 +63,7 @@ NN_MAX_ITER_FINAL    = 500     # Max iterations for final NN fit
 NN_VAL_FRACTION      = 0.1     # Inner validation fraction for NN early stopping
 ```
 
-In this assignment we examine whether machine learning can be used to predict stock returns and generate economically meaningful investment strategies. The analysis is inspired by @10.1093/rfs/hhaa009 (henceforth GKX), who show using a broad set of machine learning models that non-linear methods outperform simple historical-mean benchmarks for cross-sectional return prediction. This stands in contrast to @10.1093/rfs/hhm014, who find that machine learning models generally fail to beat the historical mean for aggregate market return prediction. We attempt to replicate part of the GKX findings using their stock characteristics and macroeconomic predictors.
+In this assignment we examine whether machine learning can be used to predict stock returns and generate economically meaningful investment strategies. The analysis is inspired by @10.1093/rfs/hhaa009, who show using a broad set of machine learning models that non-linear methods outperform simple historical-mean benchmarks for cross-sectional return prediction. This stands in contrast to @10.1093/rfs/hhm014, who find that machine learning models generally fail to beat the historical mean for aggregate market return prediction. We attempt to replicate part of the @10.1093/rfs/hhaa009 findings using their stock characteristics and macroeconomic predictors.
 
 ## Data Preparation
 
@@ -72,22 +73,15 @@ In this section we load and prepare the stock-level dataset for return predictio
 
 #| label: ex1-load-and-filter
 
-# ── Part (a): Load data and filter to post-2000 ──────────────────────────────
-# Relative path: resolves to the parquet file in the same folder as this .qmd
+# ── Part (a): We start by loading data and filter to post-2000 ──────────────────────────────
+# We get the  data from the parquet file
 df = pd.read_parquet("stock_characteristics_monthly.parquet")
 
 # Drop observations before January 2000 (data coverage and quality improve
 # substantially after this date, consistent with GKX sample construction)
 df = df[df["date"] >= pd.Timestamp("2000-01-01").date()].copy()
 
-# ── Variable selection ────────────────────────────────────────────────────────
-# Stock characteristics (10): chosen based on consistently high variable
-# importance in GKX Table 4 / Figure 5 across all machine learning models.
-#   Momentum/Reversal (3): short-term reversal, 12-month and 36-month momentum
-#   Value            (2): book-to-market, earnings-to-price
-#   Size/Liquidity   (2): log market equity, dollar volume
-#   Profitability    (3): return on assets, gross profitability, investment-to-assets
-
+# ── Variable selection ──
 CHAR_COLS = [
     "characteristic_mom1m",   # 1-month return (short-term reversal)
     "characteristic_mom12m",  # 12-month price momentum
@@ -101,12 +95,6 @@ CHAR_COLS = [
     "characteristic_invest",  # Investment-to-assets ratio
 ]
 
-# Macroeconomic predictors (4): selected from @10.1093/rfs/hhm014 based on
-# predictive power for the aggregate equity premium (GKX Table 4).
-#   dp  – dividend-price ratio (valuation level)
-#   ep  – earnings-price ratio (earnings yield)
-#   tbl – treasury-bill rate (level of short-term interest rates)
-#   tms – term spread (long minus short rate; business-cycle indicator)
 
 MACRO_COLS = [
     "macro_dp",   # Dividend-price ratio
@@ -114,14 +102,14 @@ MACRO_COLS = [
     "macro_tbl",  # Treasury-bill rate
     "macro_tms",  # Term spread
 ]
-
+#we create the columns we need
 ID_COLS = ["permno", "date", "ret_excess", "mktcap_lag", "sic2"]
 
 # Keep only selected columns
 data = df[ID_COLS + CHAR_COLS + MACRO_COLS].copy()
 ```
 
-We select ten stock characteristics and four macroeconomic variables. The characteristics are drawn from the momentum/reversal, value, size, and profitability categories that GKX identify as the most important predictors in their Table 4 and Figure 5. The macroeconomic variables capture valuation levels (dividend- and earnings-price ratios), the level of short-term interest rates (treasury-bill rate), and the business cycle (term spread), all of which @10.1093/rfs/hhm014 identify as the most reliable aggregate predictors.
+We select ten stock characteristics and four macroeconomic variables based on figure 5 form the paper of @10.1093/rfs/hhaa009. In figure 1 we see the distribution of the stock characterstics. This shows that some of the variables are non-normal and skewed highlighting the usefullness of cross-sectional median imputation and winsorisation. Figure 2 shows the monthly excess return by SIC division. All divison except "other" showcases a positive mean monthly excess return.
 
 ```{python}
 
@@ -142,6 +130,8 @@ display(Markdown(summary.to_markdown(index=False)))
 
 #| label: ex1-missing-imputation
 #| fig-cap: "Distribution of standardised stock characteristics (winsorised at 2.5% each tail). Each panel shows the cross-sectional density of one characteristic after standardisation."
+#| fig-width: 7
+#| fig-height: 2.8
 
 # --- Missing-value imputation ---
 # Stock characteristics: cross-sectional median imputation within each month.
@@ -191,6 +181,8 @@ char_dist_plot.draw()
 
 #| label: ex1-industry-plot
 #| fig-cap: "Mean monthly excess return by SIC division for the post-2000 sample. Bars show the time-series average of monthly value-weighted excess returns within each industry group."
+#| fig-width: 6
+#| fig-height: 2.5
 
 # --- Return distribution by SIC division ---
 # Map SIC2 codes to the ten major SIC division categories using pd.cut.
@@ -265,11 +257,11 @@ display(Markdown(
 
 ## Machine Learning Models
 
-We train two machine learning models to forecast monthly excess returns: a random forest and a neural network. Both are estimated within scikit-learn pipelines that include a standardisation step, ensuring that scale information from the validation and test sets does not leak into the preprocessing.
+We train two machine learning models to forecast monthly excess returns: a random forest and a neural network. These are chosen based on their prevelance in the literature as a whole.
 
 **Random forest.** The objective is to minimize mean squared error (MSE) by averaging predictions from an ensemble of independently grown decision trees, each trained on a bootstrap sample of the data and a random subset of features at each split. The key hyperparameters are: the number of trees (`n_estimators`), the maximum tree depth (`max_depth`, which controls model complexity), and the minimum number of samples required in each leaf node (`min_samples_leaf`, which acts as a regulariser).
 
-**Neural network.** The objective is to minimise MSE via the Adam stochastic gradient descent algorithm. The architecture consists of fully connected layers with sigmoid activations. The key hyperparameters are: the hidden layer sizes (controlling depth and width), the L2 penalty coefficient (`alpha`, which regularises the weights), and the initial learning rate.
+**Neural network.** The objective is to minimise MSE via the Adam stochastic gradient descent algorithm. The architecture consists of fully connected layers with sigmoid activations. The key hyperparameters are: the hidden layer sizes (controlling depth and width), the L2 penalty coefficient (`alpha`, which regularises the weights), and the initial learning rate. 
 
 ```{python}
 #| label: ex2-split
@@ -347,8 +339,9 @@ preprocessor = ColumnTransformer(
 
 ```{python}
 #| label: ex2-tune-rf
-
 #| fig-cap: "Random forest validation MSE by maximum tree depth and minimum leaf size. Lower MSE indicates better out-of-sample fit on the validation period."
+#| fig-width: 6
+#| fig-height: 2.5
 
 # ── Part (c): Random Forest – hyperparameter tuning ──────────────────────────
 # Grid over max_depth (tree complexity) and min_samples_leaf (regularisation).
@@ -422,8 +415,9 @@ rf_complexity_plot.draw()
 
 ```{python}
 #| label: ex2-tune-nn
-
 #| fig-cap: "Neural network validation MSE by hidden layer architecture and L2 regularisation strength, faceted by initial learning rate. Lower MSE indicates better out-of-sample fit on the validation period."
+#| fig-width: 6
+#| fig-height: 2.5
 
 # ── Part (c): Neural Network – hyperparameter tuning ─────────────────────────
 # Grid over hidden layer architecture (depth/width), L2 regularisation (alpha),
@@ -502,6 +496,26 @@ nn_complexity_plot.draw()
 ```
 
 ```{python}
+#| label: ex2-save-models
+#| cache: true
+
+# ── Part (d): Save final model objects to disk ────────────────────────────────
+# Both models are full scikit-learn pipelines (preprocessor + estimator).
+# A peer reviewer can load and generate predictions without any additional
+# preprocessing steps.
+joblib.dump(best_rf, "model_random_forest.joblib")
+joblib.dump(best_nn, "model_neural_network.joblib")
+```
+
+The fitted model objects are saved as `model_random_forest.joblib` and `model_neural_network.joblib`. A peer reviewer can load them with:
+
+```python
+import joblib
+best_rf = joblib.load("model_random_forest.joblib")
+best_nn = joblib.load("model_neural_network.joblib")
+```
+
+```{python}
 
 display(Markdown(
     f"The selected hyperparameters are those minimising validation MSE: for the random forest, "
@@ -512,6 +526,8 @@ display(Markdown(
     f"`learning_rate_init = {best_nn_row['learning_rate_init']}`."
 ))
 ```
+
+The 2 figures shows tha both models achieve similar MSE around 0.022. Where the random forest is not sensitive to changing hyperparameters whereas the neural network model is more sensitivity to tuning.
 
 ## Portfolio Construction and Performance Assessment
 
@@ -736,41 +752,8 @@ display(Markdown("**Table 3.** Average monthly portfolio turnover by model and p
 display(Markdown(turnover_df.to_markdown(index=False)))
 ```
 
-```{python}
-#| label: ex3-ls-plot
 
-#| fig-cap: "Cumulative long-short portfolio returns for the random forest and neural network models. The dashed vertical line marks the start of the test period. Returns are gross of transaction costs."
-
-# ── Cumulative return comparison plot ─────────────────────────────────────────
-ls_all = pd.DataFrame({
-    "RF": pd.concat([rf_ls_val, rf_ls_test]).sort_index(),
-    "NN": pd.concat([nn_ls_val, nn_ls_test]).sort_index(),
-}).reset_index().melt(id_vars="date", var_name="Model", value_name="ls_ret")
-
-ls_all["date"]   = pd.to_datetime(ls_all["date"])
-ls_all["cumret"] = ls_all.groupby("Model")["ls_ret"].transform(
-    lambda x: (1 + x).cumprod() - 1
-)
-
-ls_plot = (
-    ggplot(ls_all, aes(x="date", y="cumret", color="Model"))
-    + geom_line()
-    + geom_vline(
-        xintercept=pd.Timestamp(str(test_cutoff)),
-        linetype="dashed", color="black", size=0.5,
-    )
-    + scale_y_continuous(labels=percent_format())
-    + theme_bw()
-    + labs(
-        title="Cumulative long-short return: random forest and neural network (dashed line = test period start)",
-        x="Date", y="Cumulative excess return",
-        color="Model",
-    )
-)
-ls_plot.draw()
-```
-
-The performance metrics in Tables 1 and 2 reveal differences between the validation and test periods. Any divergence between validation and test Sharpe ratios suggests that the return predictability captured in-sample does not fully persist out-of-sample, which is consistent with the difficulty of sustaining statistical arbitrage over time as market conditions change and mispricings are corrected. The turnover figures in Table 3 indicate how frequently portfolio holdings change: high monthly turnover implies substantial transaction costs that must be weighed against the gross alpha when evaluating net-of-cost profitability.
+The performance metrics in Tables 1 and 2 reveal differences between the validation and test periods. The difference in Sharpe ratios suggests that the return predictability captured in-sample does not fully persist out-of-sample, which is consistent with the difficulty of sustaining statistical arbitrage over time as market conditions change and mispricings are corrected. The turnover figures in Table 3 indicate how frequently portfolio holdings change: high monthly turnover implies substantial transaction costs that must be weighed against the gross alpha when evaluating net-of-cost profitability. As an investor neither of the models would be preferable compared to just holding the market portfolio since they both showcases negative sharpe ratios in the test and have high turnover.
 
 ## Variable Importance and Financial Theory
 
@@ -849,8 +832,9 @@ display(Markdown(top3.to_markdown(index=False)))
 
 ```{python}
 #| label: ex4-importance-plot
-
-#| fig-cap: "Variable importance measured as the drop in annualised Sharpe ratio when each predictor group is set to its training-set mean (GKX ablation method). Red bars indicate the top three predictors per model. SIC dummies are excluded."
+#| fig-cap: "Variable importance measured as the drop in annualised Sharpe ratio."
+#| fig-width: 7
+#| fig-height: 3.2
 
 # ── Parts (a) & (b): Importance plot – side-by-side model comparison ──────────
 # Exclude SIC dummies from the plot (less interpretable; not the focus of GKX).
@@ -893,13 +877,13 @@ importance_plot = (
 importance_plot.draw()
 ```
 
-The importance rankings in Table 4 and the figure above reveal which characteristics drive portfolio performance for each model. The two models need not agree: tree-based methods capture threshold and interaction effects non-linearly, while the neural network learns smooth transformations. Disagreement between the rankings therefore reflects the models' different functional forms rather than instability in the underlying relationships.
+The importance rankings in Table 4 and the figure above reveal which characteristics drive portfolio performance for each model. The two models does not agree on the rankings. This reflects the models' different functional forms rather than instability in the underlying relationships.
 
-Connecting the top predictors to financial theory, momentum variables (short-term reversal, 12-month momentum) are consistent with the well-documented momentum risk premium and the behavioral overreaction and underreaction explanations of @10.1093/rfs/hhaa009. Profitability variables (return on assets, gross profitability) align with the investment-based and mispricing-based explanations of the profitability factor documented by GKX in their Figure 5. If valuation-based variables (book-to-market, earnings-to-price) rank highly, this supports the value premium as a compensation for systematic risk or persistent mispricing. These results are broadly consistent with GKX Table 4, which shows that momentum and profitability characteristics are among the most important predictors across all machine learning models they consider.
+Connecting the top predictors to financial theory, momentum variables (short-term reversal, 12-month momentum) are consistent with the well-documented momentum risk premium and the behavioral overreaction and underreaction explanations of @10.1093/rfs/hhaa009. Profitability variables (return on assets, gross profitability) align with the investment-based and mispricing-based explanations of the profitability factor documented by @10.1093/rfs/hhaa009 in their Figure 5. If valuation-based variables (book-to-market, earnings-to-price) rank highly, this supports the value premium as a compensation for systematic risk or persistent mispricing. These results are broadly consistent with @10.1093/rfs/hhaa009 Table 4.
 
 ## Conclusion
 
-This assignment replicates part of the @10.1093/rfs/hhaa009 framework using a random forest and a neural network trained on ten stock characteristics and four macroeconomic variables. Both models generate long-short portfolio strategies with positive Sharpe ratios and CAPM alphas over the validation period. Performance in the test period, however, may differ from the validation period, illustrating the challenge of sustaining out-of-sample predictability. The variable importance analysis identifies momentum, profitability, and value characteristics as the primary drivers of portfolio performance, consistent with GKX's findings across a broader set of models and characteristics. High monthly turnover implies that transaction costs are material, and net-of-cost returns depend critically on the execution environment. Overall, the results support the conclusion that machine learning can identify economically meaningful patterns in the cross-section of stock returns, while also highlighting the importance of rigorous out-of-sample evaluation.
+This assignment replicates part of the @10.1093/rfs/hhaa009 framework using a random forest and a neural network trained on ten stock characteristics and four macroeconomic variables. The randon forest model generate long-short portfolio strategies with positive  Sharpe ratios and CAPM alphas over the validation period. Meanwhile the neural network model strategy leads to negative sharp ratio and CAPM alpha. Performance in the test period, however, may differ from the validation period, illustrating the challenge of sustaining out-of-sample predictability. The variable importance analysis identifies momentum, profitability, and value characteristics as the primary drivers of portfolio performance, consistent with GKX's findings across a broader set of models and characteristics. High monthly turnover implies that transaction costs are material, and net-of-cost returns depend critically on the execution environment. Similar to @10.1093/rfs/hhm014 , the results does not support the conclusion that machine learning can identify economically meaningful patterns in the cross-section of stock returns. This could be due to poor model tuning and other factors.
 
 ## References
 

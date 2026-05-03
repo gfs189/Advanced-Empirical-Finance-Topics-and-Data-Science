@@ -6,8 +6,6 @@ date-format: MMMM DD, YYYY
 execute:
   echo: false
   warning: false
-  cache: true
-bibliography: references.bib
 format:
   pdf:
     number-sections: true
@@ -17,6 +15,7 @@ format:
       - left=20mm
       - bottom=20mm
       - right=20mm
+    bibliography: references.bib
     cite-method: natbib
     biblio-style: apalike
     lang: en
@@ -544,17 +543,7 @@ display(Markdown(
 ))
 ```
 
-```{python}
-#| label: ex2-save-models
-#| cache: true
-# ── Part (d): Save final model objects to disk ────────────────────────────────
-# Both models are full pipelines (preprocessor + estimator), so a peer reviewer
-# can load and predict on raw feature matrices without additional preprocessing.
-joblib.dump(best_rf, _dir / "model_random_forest.joblib")
-joblib.dump(best_nn, _dir / "model_neural_network.joblib")
-```
-
-The fitted model objects are saved as `model_random_forest.joblib` and `model_neural_network.joblib`. To load them, run:
+The fitted model objects are saved as `model_random_forest.joblib` and `model_neural_network.joblib` when first trained. To load them, run:
 
 ```python
 import joblib
@@ -665,7 +654,7 @@ nn_ls_test, nn_deciles_test = build_long_short(nn_pred_test, test_mask)
 # ── Part (d): Performance metrics ─────────────────────────────────────────────
 # Load Fama-French 3-factor data from the course repository parquet file.
 # This file is part of the course materials available to all students.
-ff3 = pd.read_parquet(_dir / "data-python/factors_ff3_monthly.parquet")
+ff3 = pd.read_parquet(_dir / "../../../course-repository/data-python/factors_ff3_monthly.parquet")
 mkt = ff3.set_index("date")["mkt_excess"]
 mkt.index = pd.to_datetime(mkt.index)
 
