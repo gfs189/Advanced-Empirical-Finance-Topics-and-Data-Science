@@ -10,7 +10,7 @@ execute:
 bibliography: references.bib
 format:
   pdf:
-    number-sections: true
+    number-sections: false
     colorlinks: true
     geometry:
       - top=20mm
@@ -46,11 +46,14 @@ from sklearn.covariance import LedoitWolf
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler
 
+
+
+
 warnings.filterwarnings("ignore")
 
-_dir        = Path(".")
-PARQUET_PATH = Path(r"C:\Users\schlu\OneDrive\Skrivebord\SKOLE\KODE\Advanced-Empirical-Finance-Topics-and-Data-Science\assignment2\stock_characteristics_monthly.parquet")
-MODEL_DIR    = Path(r"C:\Users\schlu\OneDrive\Skrivebord\SKOLE\KODE\Advanced-Empirical-Finance-Topics-and-Data-Science\Ny assignment 2")
+_dir         = Path(".")
+PARQUET_PATH = Path("../assignment2/stock_characteristics_monthly.parquet")
+MODEL_DIR    = Path(".")
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 GAMMA           = 4       # Risk aversion (fixed throughout)
@@ -100,6 +103,10 @@ def sic2_to_division(sic2_series):
 IXN_COLS = [f"{c}_x_{m}" for c, m in product(CHAR_COLS, MACRO_COLS)]
 ```
 
+## Introduction
+
+In this report we implement a transaction-cost-robust monthly portfolio backtest following @hautsch2019. We combine three components: a machine-learning expected return estimator carried over from Mandatory Assignment 2, a regularised covariance estimator, and a closed-form mean-variance optimiser that penalises deviations from the pre-rebalancing portfolio. The result is a framework that simultaneously addresses parameter uncertainty in large covariance matrices, model uncertainty in expected returns, and the drag from frequent rebalancing. The out-of-sample evaluation period spans January 2010 to December 2024, and we compare the four strategies: naive diversification(1), two variants of transaction-cost-adjusted mean-variance(2,3), and a short-sale constrained portfolio(4). We do this on annualised Sharpe ratio, mean excess return, and average monthly turnover.
+
 ```{python}
 #| label: data-loading
 #| cache: true
@@ -142,6 +149,8 @@ factors_ff3 = factors_ff3.set_index("date")[["mkt_excess","smb","hml"]]
 # Column names must match the 59 features used in MA2 training.
 rf_model = joblib.load(MODEL_DIR / "model_random_forest.joblib")
 ```
+
+## 1
 
 ```{python}
 #| label: ex1-universe
@@ -205,7 +214,7 @@ display(Markdown(
 ))
 ```
 
-## Exercise 2: Theoretical Foundation
+## 2
 
 **Closed-form solution.** The transaction-cost-adjusted problem is
 
@@ -215,7 +224,7 @@ $$
 - \lambda\,(\omega-\omega_t^{+})'\hat\Sigma_t\,(\omega-\omega_t^{+}).
 $$
 
-Expanding the quadratic TC term and collecting like powers of $\omega$ yields an equivalent standard MV problem with modified inputs $\tilde\mu_t := \hat\mu_t + 2\lambda\hat\Sigma_t\omega_t^{+}$ and $\tilde\gamma := \gamma+2\lambda$:
+Expanding the quadratic TC term and collecting yields an equivalent standard MV problem with modified inputs $\tilde\mu_t := \hat\mu_t + 2\lambda\hat\Sigma_t\omega_t^{+}$ and $\tilde\gamma := \gamma+2\lambda$:
 
 $$
 \max_{\omega:\,\iota'\omega=1}\;\omega'\tilde\mu_t - \tfrac{\tilde\gamma}{2}\,\omega'\hat\Sigma_t\omega.
@@ -338,7 +347,7 @@ def compute_constrained_weights(mu, Sigma, gamma=GAMMA):
     return out / s if s > 1e-12 else w0
 ```
 
-## Exercise 3: Covariance Estimation
+## 3
 
 We estimate $\hat\Sigma_t$ at each month $t$ using a **Fama-French three-factor model** fitted on the 60-month rolling window ending at $t$. The factor structure decomposes the return covariance as
 
@@ -502,7 +511,7 @@ display(Markdown(
 ))
 ```
 
-## Exercise 4: Expected Returns
+## 4
 
 We use the Random Forest pipeline trained in MA2 to generate $\hat\mu_t$ for every stock-month in the backtest window. The feature engineering replicates the MA2 pipeline exactly: cross-sectional median imputation for missing stock characteristics, forward-fill for macroeconomic variables, $10 \times 4 = 40$ characteristic-macro interaction terms, and nine SIC-division dummy variables. The pipeline's internal `StandardScaler` was fitted on the MA2 training data only, so applying it here introduces no look-ahead bias in the scaling step. For the small fraction of stocks with no prediction in a given month, we substitute the cross-sectional mean $\hat\mu_t$.
 
@@ -561,7 +570,7 @@ mu_hat_all = rf_model.predict(X_all.drop(columns=["permno", "date"]))
 mu_predictions = X_all[["permno", "date"]].assign(mu_hat=mu_hat_all)
 ```
 
-## Exercise 5: Portfolio Backtest
+## 5
 
 We evaluate four strategies over portfolio-return months **January 2010 – December 2024** (portfolios formed December 2009 – November 2024). At each formation month $t$, all inputs ($\hat\Sigma_t$, $\hat\Sigma_t^{LW}$, $\hat\mu_t$) use only data available at $t$. We set $\gamma=4$ and $\lambda=0.1$.
 
@@ -805,9 +814,13 @@ cum_df = (
 
 The results show whether penalising deviations from $\omega_t^+$ (through $\lambda$) helps after costs relative to naive diversification, and whether the choice of covariance estimator matters for out-of-sample performance. The short-sale constrained portfolio implicitly regularises $\hat\Sigma^{LW}$ further, as shown by @jagannathan2003: imposing non-negativity constraints is equivalent to shrinking the estimated covariance toward a factor structure that ignores negative correlations. Whether this constitutes a *true* out-of-sample experiment is debatable: the ML model's hyperparameters were chosen using data that partly overlaps the backtest window, so it is best described as a *pseudo-out-of-sample* evaluation rather than a fully clean holdout test.
 
-## Exercise 6: Guest Lecture
+## 6
 
 *Insert 2–3 sentence personal reflection on Cilie Feldager's lecture here. This section does not count toward the page limit.*
+
+## Conclusion
+
+This assignment demonstrates that accounting for transaction costs materially changes portfolio construction decisions. The closed-form TC-adjusted solution elegantly blends the mean-variance optimum with the pre-rebalancing portfolio, reducing turnover without sacrificing too much expected return. Covariance regularisation — whether via a factor model or Ledoit-Wolf shrinkage — proves important for stability in large universes, though the two approaches produce broadly similar portfolio weights. The backtest results should be interpreted cautiously as a pseudo-out-of-sample exercise: the machine learning return forecasts from MA2 were developed using data that partially overlaps the evaluation window, so the experiment does not constitute a fully clean holdout test.
 
 ## References
 
