@@ -16,3 +16,9 @@ aef-2026/
 # R
 .Rhistory
 .RData
+
+# Quarto intermediate files
+*.quarto_ipynb*
+.quarto/
+*_cache/
+*_files/
