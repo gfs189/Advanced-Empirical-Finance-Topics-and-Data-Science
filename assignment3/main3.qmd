@@ -28,40 +28,50 @@ format:
 #| label: setup
 #| cache: false
 
+# All required packages loaded here at the top so the script runs without interruption.
+# Standard data and numeric libraries
 import pandas as pd
 import numpy as np
 from pathlib import Path
 import warnings
-import joblib
+import joblib                          # for loading the saved MA2 model object
 from IPython.display import display, Markdown
-from itertools import product
+from itertools import product          # used to build characteristic × macro interaction names
 from scipy.stats import expon
-from scipy.optimize import minimize
+from scipy.optimize import minimize    # fallback solver for the constrained MV problem
 
+# Finance data download and plotting
 import tidyfinance as tf
 from plotnine import *
 from mizani.formatters import percent_format
 
+# Covariance estimation and preprocessing
 from sklearn.covariance import LedoitWolf
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler
 
-
+# Quadratic programming solvers for the long-only portfolio (Exercise 5d)
+import quadprog
+try:
+    import cvxpy as cp     # optional second solver; falls back to scipy if not installed
+except ImportError:
+    cp = None
 
 
 warnings.filterwarnings("ignore")
 
+# File paths — relative to this script so peer reviewers can run without editing paths
 _dir         = Path(".")
-PARQUET_PATH = Path("../assignment2/stock_characteristics_monthly.parquet")
-MODEL_DIR    = Path(".")
+PARQUET_PATH = Path("../assignment2/stock_characteristics_monthly.parquet")  # MA2 data
+MODEL_DIR    = Path(".")   # model_random_forest.joblib lives alongside this script
 
-# ── Constants ─────────────────────────────────────────────────────────────────
-GAMMA           = 4       # Risk aversion (fixed throughout)
-LAMBDA_TC       = 0.1     # Transaction cost parameter (1000 bp = 0.10)
+# ── Global constants — centralised here so changing one value propagates everywhere ──
+GAMMA           = 4       # Risk aversion (fixed throughout per assignment)
+LAMBDA_TC       = 0.1     # Transaction cost parameter λ = 1000 bp = 0.10
 COV_WINDOW      = 60      # Rolling window for covariance estimation (months)
-MIN_OBS         = 24      # Minimum valid observations required per stock
+MIN_OBS         = 24      # Minimum valid return observations required per stock
 MONTHS_PER_YEAR = 12
-MAX_N_STOCKS    = 300     # Universe cap: top stocks by mktcap — reduces O(N³) to O(2.7×10⁷)
+MAX_N_STOCKS    = 300     # Cap universe to top-300 by market cap to keep runtime manageable
 
 # Formation dates: Dec 2009 – Nov 2024 → portfolio returns Jan 2010 – Dec 2024
 FORM_START = pd.Timestamp("2009-12-01")
@@ -111,21 +121,23 @@ In this report we implement a transaction-cost-robust monthly portfolio backtest
 #| label: data-loading
 #| cache: true
 
-# ── Load parquet (stock characteristics 2000–2024) ────────────────────────────
+# Load the parquet file produced in MA2 — contains monthly stock characteristics,
+# macroeconomic variables, excess returns, and lagged market caps from 2000 to 2024.
 _needed_cols = ID_COLS + CHAR_COLS + MACRO_COLS
 df_raw = pd.read_parquet(PARQUET_PATH, columns=_needed_cols)
+# Snap all dates to month-end so date joins with other datasets align exactly.
 df_raw["date"] = pd.to_datetime(df_raw["date"]) + pd.offsets.MonthEnd(0)
 
-# ── Wide-form returns matrix: rows=month-end dates, cols=permnos ──────────────
-# Built here so all subsequent chunks can reference it without caching issues.
+# Pivot to a wide returns matrix (T × N) once — every later chunk looks up returns
+# from this single object instead of re-filtering the long format each time.
 returns_wide = (
     df_raw[["date","permno","ret_excess"]]
     .pivot(index="date", columns="permno", values="ret_excess")
 )
-# Index is already month-end after the MonthEnd(0) shift above.
 
-# ── Parquet-based universe (mktcap_lag > 20th percentile each month) ──────────
-# Used for the backtest universe; price filter requires CRSP (see Exercise 1).
+# Build the parquet-based universe by keeping only stocks above the 20th
+# market-cap percentile each month.  The price filter (> $2) is applied in
+# Exercise 1 where CRSP data with price is available.
 p20 = (
     df_raw.groupby("date")["mktcap_lag"]
     .quantile(0.20)
@@ -136,7 +148,8 @@ df_raw = df_raw.merge(p20, on="date", how="left")
 universe_pq = df_raw.loc[df_raw["mktcap_lag"] >= df_raw["mktcap_p20"],
                           ["date","permno","mktcap_lag"]].copy()
 
-# ── Download Fama-French 3-factor monthly returns ─────────────────────────────
+# Download Fama-French 3-factor returns (MKT-RF, SMB, HML) from Kenneth French's
+# website via tidyfinance — used as factors in the covariance model (Exercise 3).
 factors_ff3 = tf.download_data(
     "famafrench", dataset="F-F_Research_Data_Factors",
     start_date="2003-01-01", end_date="2025-01-31"
@@ -144,9 +157,9 @@ factors_ff3 = tf.download_data(
 factors_ff3["date"] = pd.to_datetime(factors_ff3["date"]) + pd.offsets.MonthEnd(0)
 factors_ff3 = factors_ff3.set_index("date")[["mkt_excess","smb","hml"]]
 
-# ── Load the MA2 Random Forest pipeline ──────────────────────────────────────
-# Pipeline: ColumnTransformer(StandardScaler) → RandomForestRegressor
-# Column names must match the 59 features used in MA2 training.
+# Load the Random Forest pipeline saved at the end of MA2.
+# The pipeline bundles StandardScaler + RandomForestRegressor, so a single
+# .predict() call handles both scaling and prediction without extra preprocessing.
 rf_model = joblib.load(MODEL_DIR / "model_random_forest.joblib")
 ```
 
@@ -156,15 +169,16 @@ rf_model = joblib.load(MODEL_DIR / "model_random_forest.joblib")
 #| label: ex1-universe
 #| cache: true
 
-# Download full CRSP monthly from 1980 for Exercise 1 universe statistics.
-# Requires WRDS access via tidyfinance; parquet-based fallback is used otherwise.
+# Download the full CRSP monthly dataset to apply the price filter and compute the NYSE 20th percentile cutoff. 
 try:
     crsp_full = tf.download_data(
         "wrds", dataset="crsp_monthly", start_date="1980-01-01", end_date="2024-12-31"
     )
     crsp_full["date"] = pd.to_datetime(crsp_full["date"]) + pd.offsets.MonthEnd(0)
 
-    # NYSE 20th percentile size breakpoint each month
+    # Compute the NYSE 20th size percentile each month using NYSE-listed stocks only.
+    # Using NYSE breakpoints (not all-exchange) is the standard Fama-French convention
+    # and prevents the many small AMEX/NASDAQ stocks from pulling the cutoff too low.
     nyse_p20 = (
         crsp_full.loc[crsp_full["exchange"] == "NYSE"]
         .groupby("date")["mktcap"]
@@ -174,18 +188,20 @@ try:
     )
     crsp_full = crsp_full.merge(nyse_p20, on="date", how="left")
 
-    # Filters: |price| > $2  and  mktcap >= NYSE 20th percentile
+    # Apply both filters: absolute price > $2 removes penny stocks and
+    # mktcap >= NYSE 20th percentile removes micro-caps that inflate turnover.
     universe_ex1 = crsp_full.loc[
         (crsp_full["prc"].abs() > 2) &
         (crsp_full["mktcap"] >= crsp_full["nyse_p20"])
     ].copy()
 
+    # Count how many stocks pass the filters in each month
     n_by_month = universe_ex1.groupby("date")["permno"].count()
     avg_N      = n_by_month.mean()
     data_source = "CRSP (1980–2024)"
 
 except Exception as exc:
-    # Fallback: characterise the parquet universe (from 2000 only)
+    # Fallback: use the parquet universe (no price filter, starts 2000)
     n_by_month  = universe_pq.groupby("date")["permno"].count()
     avg_N       = n_by_month.mean()
     data_source = "parquet proxy (2000–2024, no price filter)"
@@ -196,9 +212,11 @@ except Exception as exc:
 #| cache: false
 #| fig-cap: "Monthly number of stocks passing the universe filters. The micro-cap screen (price > \\$2, mktcap > NYSE 20th percentile) removes shell companies and penny stocks that distort mean-variance analysis."
 
+# Reshape the monthly count series to a plain DataFrame for ggplot
 n_plot_df = n_by_month.reset_index()
 n_plot_df.columns = ["date", "N"]
 
+# Plot the time series of universe size to show how the investable set evolves
 (
     ggplot(n_plot_df, aes(x="date", y="N"))
     + geom_line(color="#2166ac", size=0.5)
@@ -207,6 +225,7 @@ n_plot_df.columns = ["date", "N"]
            x="Date", y="Number of stocks")
 ).draw()
 
+# Print the average N and a brief characterisation as inline markdown text
 display(Markdown(
     f"The filtered universe contains on average **{avg_N:.0f} stocks** per month "
     f"({data_source}). The decline after the dot-com peak reflects the wave of "
@@ -215,7 +234,7 @@ display(Markdown(
 ```
 
 ## 2
-
+We now establish the theoretical foundation for the assigment:
 **Closed-form solution.** The transaction-cost-adjusted problem is
 
 $$
@@ -250,29 +269,30 @@ $$
 
 Hence $\omega^*_{t+1}$ is a **convex combination** of the mean-variance portfolio and the pre-rebalancing portfolio $\omega_t^+$.
 
-**Role of $\lambda$.** The parameter $\lambda$ governs the trade-off between chasing the optimal MV portfolio and staying put. As $\lambda\to 0$, $\omega^*\to\omega^{\mathrm{MV}}$ (no cost of rebalancing); as $\lambda\to\infty$, $\omega^*\to\omega_t^+$ (never rebalance). Larger $\lambda$ produces lower turnover but also larger deviation from the unconstrained optimum.
+a) **Role of $\lambda$.** The parameter $\lambda$ governs the trade-off between chasing the optimal MV portfolio and staying put. As $\lambda\to 0$, $\omega^*\to\omega^{\mathrm{MV}}$ (no cost of rebalancing); as $\lambda\to\infty$, $\omega^*\to\omega_t^+$ (never rebalance). Larger $\lambda$ produces lower turnover but also larger deviation from the unconstrained optimum.
 
-**Realism of the variance-based TC model.** Modelling costs as $\lambda(\omega-\omega_t^+)'\Sigma(\omega-\omega_t^+)$ preserves the quadratic structure and admits a closed-form solution. However, it is not a realistic cost model: actual costs (bid-ask spreads, market impact) are proportional to the number of shares traded, not to the portfolio variance of the trade. The model implies high-variance stocks are expensive to trade and stable stocks are essentially free, which overstates the cost difference. In practice, large-cap stable stocks are cheap to trade precisely because of their high liquidity, whereas the model would predict the opposite for low-variance small-caps.
+b) **Realism of the variance-based TC model.** Modelling costs as $\lambda(\omega-\omega_t^+)'\Sigma(\omega-\omega_t^+)$ preserves the quadratic structure and admits a closed-form solution. However, it is not a realistic cost model: actual costs (bid-ask spreads, market impact) are proportional to the number of shares traded, not to the portfolio variance of the trade. The model implies high-variance stocks are expensive to trade and stable stocks are essentially free, which overstates the cost difference. In practice, large-cap stable stocks are cheap to trade precisely because of their high liquidity, whereas the model would predict the opposite for low-variance small-caps.
 
 ```{python}
 #| label: ex2-functions
 
-import quadprog
-
-# ── Core portfolio functions (tidy-finance pattern) ───────────────────────────
+# ── Portfolio weight functions implementing the closed-form solution from Ex 2 ─
 
 def prefactor_sigma(Sigma, mu):
     """
-    Solve Σ x = [μ | ι] in one LU factorisation and return the derived scalars.
-    Following tidy-finance compute_efficient_weight: factorise Σ once per month,
-    then each strategy's weights are O(N) vector operations.
-    Returns (Si_mu, Si_iota, iota_Si_mu, iota_Si_iota).
+    Solve the linear system Σ·x = [μ | ι] in a single LU factorisation.
+    By solving for both right-hand sides at once we avoid inverting Σ twice,
+    which halves the O(N³) cost.  The four returned scalars are all that
+    compute_efficient_weight needs — no N×N matrix is ever stored.
+    Returns: (Σ⁻¹μ, Σ⁻¹ι, ι'Σ⁻¹μ, ι'Σ⁻¹ι)
     """
     N    = len(mu)
     iota = np.ones(N)
     try:
+        # Standard LU solve — fast and numerically stable for well-conditioned Σ
         sol = np.linalg.solve(Sigma, np.column_stack([mu, iota]))
     except np.linalg.LinAlgError:
+        # Fall back to pseudo-inverse if Σ is singular (rare, but possible for tiny universes)
         Si  = np.linalg.pinv(Sigma)
         sol = Si @ np.column_stack([mu, iota])
     Si_mu, Si_iota = sol[:, 0], sol[:, 1]
@@ -282,38 +302,53 @@ def prefactor_sigma(Sigma, mu):
 def compute_efficient_weight(Si_mu, iota_Si_mu, Si_iota, iota_Si_iota,
                               gamma, lam=0.0, w_prev=None):
     """
-    O(N) closed-form TC-adjusted MV using pre-factored Σ⁻¹μ and Σ⁻¹ι.
+    Closed-form TC-adjusted MV weight (Exercise 2a solution).
+    Takes pre-computed Σ⁻¹μ and Σ⁻¹ι from prefactor_sigma() so the per-strategy
+    cost is only O(N) vector arithmetic — Σ is never touched again.
 
-    Tidy-finance key identity: Σ⁻¹μ̃ = Σ⁻¹μ + 2λω⁺
-    because μ̃ = μ + 2λΣω⁺  →  Σ⁻¹μ̃ = Σ⁻¹μ + 2λω⁺.
-    So once Σ is factorised via prefactor_sigma(), each strategy costs O(N).
+    Key identity: Σ⁻¹μ̃ = Σ⁻¹μ + 2λω⁺  (because μ̃ = μ + 2λΣω⁺)
+    γ̃ = γ + 2λ absorbs the TC penalty into the effective risk aversion.
+    φ is the Lagrange multiplier enforcing the budget constraint ι'ω = 1.
     """
     N = len(Si_mu)
     if lam == 0.0 or w_prev is None:
+        # No transaction cost: recover the standard MV portfolio
         w_prev, lam = np.zeros(N), 0.0
-    gamma_tilde      = gamma + 2.0 * lam
-    Si_mu_tilde      = Si_mu + 2.0 * lam * w_prev
-    iota_Si_mu_tilde = iota_Si_mu + 2.0 * lam        # ι'ω⁺ = 1 always
-    phi              = (iota_Si_mu_tilde - gamma_tilde) / iota_Si_iota
+    gamma_tilde      = gamma + 2.0 * lam              # effective risk aversion
+    Si_mu_tilde      = Si_mu + 2.0 * lam * w_prev     # Σ⁻¹μ̃ using the identity above
+    iota_Si_mu_tilde = iota_Si_mu + 2.0 * lam         # ι'ω⁺ = 1 always
+    phi              = (iota_Si_mu_tilde - gamma_tilde) / iota_Si_iota  # budget multiplier
     return (1.0 / gamma_tilde) * (Si_mu_tilde - phi * Si_iota)
+
+
+def compute_weights(mu, Sigma, gamma, lambda_tc, w_prev):
+    """
+    Public interface matching the assignment's required signature: (mu, Sigma, gamma, lambda, w_prev).
+    Factorises Sigma once via prefactor_sigma, then delegates to compute_efficient_weight.
+    Use this function when you have the full Sigma matrix available.
+    """
+    Si_mu, Si_iota, iota_Si_mu, iota_Si_iota = prefactor_sigma(Sigma, mu)
+    return compute_efficient_weight(
+        Si_mu, iota_Si_mu, Si_iota, iota_Si_iota, gamma, lambda_tc, w_prev
+    )
 
 
 def compute_constrained_weights(mu, Sigma, gamma=GAMMA):
     """
-    Long-only MV via quadprog — the Python equivalent of R's solve.QP from
-    tidy-finance.org.  Falls back to cvxpy/OSQP then scipy SLSQP if needed.
-
+    Long-only (ω ≥ 0) mean-variance portfolio solved as a quadratic programme.
+    Three solvers are tried in order of speed; the fallback chain ensures the
+    function always returns a valid weight vector.
     QP form:  min  ½ w'(γΣ)w − μ'w   s.t.  ι'w = 1,  w ≥ 0
     """
     N    = len(mu)
     iota = np.ones(N)
-    w0   = iota / N
+    w0   = iota / N   # equal-weight starting point / fallback
 
-    # ── quadprog (R solve.QP equivalent, fastest) ─────────────────────────────
+    # First choice: quadprog (the Python equivalent of R's solve.QP — fastest)
     try:
-        G = (gamma * Sigma + 1e-8 * np.eye(N)).astype(np.float64)
+        G = (gamma * Sigma + 1e-8 * np.eye(N)).astype(np.float64)  # small ridge for PD
         a = mu.astype(np.float64)
-        C = np.column_stack([iota, np.eye(N)]).astype(np.float64)
+        C = np.column_stack([iota, np.eye(N)]).astype(np.float64)   # budget + non-negativity
         b = np.concatenate([[1.0], np.zeros(N)]).astype(np.float64)
         w = quadprog.solve_qp(G, a, C, b, meq=1)[0]
         w = np.maximum(w, 0.0); s = w.sum()
@@ -321,9 +356,8 @@ def compute_constrained_weights(mu, Sigma, gamma=GAMMA):
     except Exception:
         pass
 
-    # ── cvxpy / OSQP fallback ────────────────────────────────────────────────
+    # Second choice: cvxpy with OSQP solver (more flexible but slower)
     try:
-        import cvxpy as cp
         w    = cp.Variable(N)
         obj  = cp.Maximize(mu @ w - (gamma / 2.0) * cp.quad_form(w, cp.psd_wrap(Sigma)))
         prob = cp.Problem(obj, [cp.sum(w) == 1, w >= 0])
@@ -334,7 +368,7 @@ def compute_constrained_weights(mu, Sigma, gamma=GAMMA):
     except Exception:
         pass
 
-    # ── scipy SLSQP last resort ───────────────────────────────────────────────
+    # Last resort: scipy SLSQP — always available but slowest
     def neg_u(w): return -(w @ mu - (gamma / 2.0) * w @ Sigma @ w)
     def grad(w):  return -(mu - gamma * Sigma @ w)
     res = minimize(neg_u, w0, jac=grad, method="SLSQP",
@@ -362,20 +396,28 @@ For $\hat\Sigma_t^{LW}$ we apply Ledoit-Wolf (2004) shrinkage to the rolling **s
 ```{python}
 #| label: ex3-cov-functions
 
+# ── Covariance estimation helpers for Exercise 3 ─────────────────────────────
+# Two estimators are implemented: (1) a Fama-French factor model and
+# (2) Ledoit-Wolf shrinkage.  Both avoid forming large N×N matrices in the
+# backtest loop by using the Woodbury matrix identity.
+
 def estimate_factor_cov(R, F):
     """
-    Factor model covariance Σ = B·ΣF·B' + diag(σ²_ε).
-    Returns full N×N matrix — used only for the ex3 comparison plot.
-    Backtest uses estimate_factor_components + woodbury_factor instead.
+    Build the full N×N factor-model covariance Σ = B·ΣF·B' + diag(σ²_ε).
+    OLS regresses each stock's returns on the three FF factors to get loadings B
+    and idiosyncratic variances D.  The factor covariance ΣF is estimated from
+    the factor returns.  Only used for the Exercise 3b comparison plot — the
+    backtest uses the lighter estimate_factor_components instead.
     """
     T, N = R.shape
     K    = F.shape[1]
-    X_f  = np.column_stack([np.ones(T), F])
-    coef = np.linalg.solve(X_f.T @ X_f, X_f.T @ R)
-    betas     = coef[1:].T
-    resid_var = np.var(R - X_f @ coef, axis=0, ddof=K + 1)
-    Sigma_F   = np.cov(F.T, ddof=1)
+    X_f  = np.column_stack([np.ones(T), F])  # add intercept column
+    coef = np.linalg.solve(X_f.T @ X_f, X_f.T @ R)  # OLS: (X'X)⁻¹X'R
+    betas     = coef[1:].T                    # drop intercept row; shape N×K
+    resid_var = np.var(R - X_f @ coef, axis=0, ddof=K + 1)  # idiosyncratic variance
+    Sigma_F   = np.cov(F.T, ddof=1)           # K×K factor covariance
     Sigma     = betas @ Sigma_F @ betas.T + np.diag(resid_var)
+    # Ensure positive definiteness by nudging any near-zero eigenvalues
     lmin = np.linalg.eigvalsh(Sigma).min()
     if lmin < 1e-10:
         Sigma += (abs(lmin) + 1e-8) * np.eye(N)
@@ -383,7 +425,11 @@ def estimate_factor_cov(R, F):
 
 
 def estimate_factor_components(R, F):
-    """Return (betas N×K, Sigma_F K×K, resid_var N) without forming Σ."""
+    """
+    Lightweight version that returns only the factor model components
+    (B, ΣF, σ²_ε) without assembling the full N×N matrix.
+    Used in the backtest loop; the Woodbury solve operates on these parts directly.
+    """
     T, N = R.shape
     K    = F.shape[1]
     X_f  = np.column_stack([np.ones(T), F])
@@ -395,42 +441,51 @@ def estimate_factor_components(R, F):
 
 def woodbury_factor(betas, Sigma_F, resid_var, V):
     """
-    (B·ΣF·B' + D)⁻¹·V via Woodbury identity — O(NK²) instead of O(N³).
-    Core system is K×K = 3×3. No N×N matrix formed or stored.
-    D⁻¹v − D⁻¹B·(ΣF⁻¹ + B'D⁻¹B)⁻¹·B'D⁻¹v
+    Compute (B·ΣF·B' + D)⁻¹·V using the Woodbury identity.
+    Instead of inverting the full N×N matrix, the core linear system is K×K = 3×3,
+    giving O(NK²) complexity rather than O(N³).
+    Formula: D⁻¹V − D⁻¹B·(ΣF⁻¹ + B'D⁻¹B)⁻¹·B'D⁻¹V
     """
-    D_inv   = 1.0 / resid_var
-    D_inv_B = D_inv[:, None] * betas                         # N×K
-    M       = np.linalg.inv(Sigma_F) + betas.T @ D_inv_B    # K×K  ← tiny
-    D_inv_V = D_inv[:, None] * V                             # N×m
+    D_inv   = 1.0 / resid_var             # element-wise inverse of diagonal D
+    D_inv_B = D_inv[:, None] * betas      # N×K: scales each row of B by 1/σ²_ε
+    M       = np.linalg.inv(Sigma_F) + betas.T @ D_inv_B  # K×K core — only inversion
+    D_inv_V = D_inv[:, None] * V
     return D_inv_V - D_inv_B @ np.linalg.solve(M, betas.T @ D_inv_V)
 
 
 def lw_components(R_vals, lw_alpha):
     """
-    Decompose Σ_LW = U'U + γI where U is T×N (T=60).
-    U = sqrt((1−α)/(T−1)) · R_centred,  γ = α · trace(S)/N.
-    Never forms the N×N matrix — caller uses woodbury_lw for solves.
+    Express the Ledoit-Wolf shrinkage estimator as Σ_LW = U'U + γI,
+    where U is a T×N scaled demeaned return matrix and γ is a scalar shrinkage target.
+    This rank-T factorisation lets us apply the Woodbury identity with a T×T core
+    (T=60) instead of an N×N one.
+    lw_alpha is the optimal shrinkage intensity returned by sklearn's LedoitWolf.
     """
-    R_c   = R_vals - R_vals.mean(axis=0)
+    R_c   = R_vals - R_vals.mean(axis=0)   # demean returns
     T     = R_c.shape[0]
+    # γ = shrinkage intensity × average sample variance (the shrinkage target level)
     gamma = lw_alpha * np.var(R_c, axis=0, ddof=1).mean()
-    U     = np.sqrt((1.0 - lw_alpha) / (T - 1)) * R_c       # T×N
+    # Scale so that U'U equals the shrunk sample covariance component (1−α)·S
+    U     = np.sqrt((1.0 - lw_alpha) / (T - 1)) * R_c
     return U, gamma
 
 
 def woodbury_lw(U, gamma, V):
     """
-    (U'U + γI)⁻¹·V via Woodbury — O(T²N) instead of O(N³).
-    Core system is T×T = 60×60.  Formula:
-    V/γ − U'·(γI + UU')⁻¹·(UV)/γ
+    Compute (U'U + γI)⁻¹·V via Woodbury with a T×T = 60×60 core solve.
+    This is O(T²N) compared to O(N³) for a direct inversion of the full matrix.
+    Formula: V/γ − U'·(γI + UU')⁻¹·(UV)/γ
     """
-    core = gamma * np.eye(U.shape[0]) + U @ U.T    # T×T  ← the only inversion
+    core = gamma * np.eye(U.shape[0]) + U @ U.T    # T×T — the only matrix inverse
     return V / gamma - (U.T @ np.linalg.solve(core, U @ V)) / gamma
 
 
 def simplex_project(v):
-    """Project onto {w ≥ 0, Σw = 1} in O(N log N)."""
+    """
+    Project a vector onto the probability simplex {w ≥ 0, Σwᵢ = 1} in O(N log N).
+    Used inside the projected-gradient solver to enforce the long-only constraint
+    after each gradient step.
+    """
     u    = np.sort(v)[::-1]
     cssv = np.cumsum(u) - 1.0
     rho  = np.where(u > cssv / np.arange(1, len(v) + 1))[0][-1]
@@ -439,24 +494,30 @@ def simplex_project(v):
 
 def constrained_pg(mu, U, gamma, gamma_mv, n_iter=600, tol=1e-12):
     """
-    Long-only MV via projected gradient + Woodbury Σ·w products.
-    Each iteration O(TN) — no N×N QP, no N×N matrix.
-    LW shrinkage keeps condition number low → fast convergence.
+    Solve the long-only MV problem using projected gradient descent with
+    Woodbury matrix-vector products (O(TN) per iteration, no N×N matrix).
+    Each step: gradient of the MV objective → project onto the simplex.
+    The step size is set to 1 / (γ · Lipschitz constant of the gradient).
+    LW shrinkage keeps the condition number low, so convergence is fast.
     """
     N    = U.shape[1]
+    # Lipschitz constant of ∇f = γΣw − μ is γ·‖Σ‖₂ ≈ γ(‖U‖₂² + γ)
     step = 1.0 / (gamma_mv * (np.linalg.norm(U, ord=2) ** 2 + gamma))
-    w    = np.ones(N) / N
+    w    = np.ones(N) / N  # start from equal-weight portfolio
     for _ in range(n_iter):
-        g     = gamma_mv * (U.T @ (U @ w) + gamma * w) - mu
-        w_new = simplex_project(w - step * g)
-        if np.dot(w_new - w, w_new - w) < tol:
+        g     = gamma_mv * (U.T @ (U @ w) + gamma * w) - mu  # gradient of −utility
+        w_new = simplex_project(w - step * g)                 # projected gradient step
+        if np.dot(w_new - w, w_new - w) < tol:               # convergence check
             break
         w = w_new
     return w
 
 
 def min_var_weights(Sigma):
-    """Global minimum-variance portfolio (closed form) — used in ex3 plot."""
+    """
+    Compute the global minimum-variance portfolio in closed form: w* = Σ⁻¹ι / (ι'Σ⁻¹ι).
+    Only used in the Exercise 3b comparison plot, not in the main backtest.
+    """
     iota = np.ones(Sigma.shape[0])
     try:
         SiI = np.linalg.solve(Sigma, iota)
@@ -470,31 +531,39 @@ def min_var_weights(Sigma):
 #| cache: true
 #| fig-cap: "Minimum-variance weights from the factor model ($\\hat\\Sigma$, x-axis) versus Ledoit-Wolf ($\\hat\\Sigma^{LW}$, y-axis) at December 2019. Each point is one stock; the dashed line is the 45° reference."
 
-# Representative month for comparison (December 2019)
-rep_date    = pd.Timestamp("2019-12-31")
-win_dates   = returns_wide.index[returns_wide.index <= rep_date][-COV_WINDOW:]
-R_rep       = returns_wide.loc[win_dates]
+# Use December 2019 as a representative snapshot month (mid-sample, pre-COVID)
+rep_date  = pd.Timestamp("2019-12-31")
+# Slice the most recent COV_WINDOW months of returns up to and including rep_date
+win_dates = returns_wide.index[returns_wide.index <= rep_date][-COV_WINDOW:]
+R_rep     = returns_wide.loc[win_dates]
 
-# Keep stocks with ≥ MIN_OBS valid observations, then drop stocks with any NaN
-valid_mask  = R_rep.notna().sum() >= MIN_OBS
-R_rep       = R_rep.loc[:, valid_mask].dropna(axis=1)
+# Drop stocks with fewer than MIN_OBS non-missing observations in the window,
+# then drop any remaining columns with any NaN (required for OLS and LW fitting)
+valid_mask = R_rep.notna().sum() >= MIN_OBS
+R_rep      = R_rep.loc[:, valid_mask].dropna(axis=1)
 
-F_rep       = factors_ff3.reindex(R_rep.index).values
-R_vals      = R_rep.values
+F_rep  = factors_ff3.reindex(R_rep.index).values
+R_vals = R_rep.values
 
-Sigma_fac   = estimate_factor_cov(R_vals, F_rep)
+# Estimate the factor-model covariance (full N×N, only feasible for the plot)
+Sigma_fac = estimate_factor_cov(R_vals, F_rep)
 
-lw_fitter   = LedoitWolf(assume_centered=False)
+# Fit Ledoit-Wolf to the same return window; sklearn returns the shrinkage
+# intensity (alpha) and the shrunk covariance matrix directly
+lw_fitter    = LedoitWolf(assume_centered=False)
 lw_fitter.fit(R_vals)
 Sigma_lw_rep = lw_fitter.covariance_
 
+# Compute global min-variance weights under each estimator
 w_fac = min_var_weights(Sigma_fac)
 w_lw  = min_var_weights(Sigma_lw_rep)
 
+# Summarise agreement between the two sets of weights with correlation and MAE
 cov_df = pd.DataFrame({"w_factor": w_fac, "w_lw": w_lw})
 corr_w = np.corrcoef(w_fac, w_lw)[0, 1]
 mae_w  = np.mean(np.abs(w_fac - w_lw))
 
+# Scatter plot: each point is one stock; diagonal line = perfect agreement
 (
     ggplot(cov_df, aes(x="w_factor", y="w_lw"))
     + geom_point(alpha=0.35, size=0.8)
@@ -504,6 +573,7 @@ mae_w  = np.mean(np.abs(w_fac - w_lw))
            x="Factor model weight", y="Ledoit-Wolf weight")
 ).draw()
 
+# Print correlation and MAE as inline text below the figure
 display(Markdown(
     f"The two estimators produce min-variance weights with correlation "
     f"**{corr_w:.3f}** and mean absolute difference **{mae_w*100:.2f} pp**. "
@@ -519,9 +589,15 @@ We use the Random Forest pipeline trained in MA2 to generate $\hat\mu_t$ for eve
 #| label: ex4-predictions
 #| cache: true
 
+# Generate all monthly return forecasts μ̂_t for the backtest window in one pass.
+# Feature engineering exactly replicates the MA2 pipeline to ensure the RF model
+# sees the same input structure it was trained on.
+
+# All formation months from Dec 2009 to Nov 2024 (180 months total)
 formation_dates = pd.date_range(start=FORM_START, end=FORM_END, freq="ME")
 
-# ── 1. Filter df_raw to all formation dates in one pass ───────────────────────
+# Step 1: Subset the raw data to only formation months — much faster than
+# filtering inside a loop, and avoids repeated groupby overhead.
 df_form = (
     df_raw
     .loc[df_raw["date"].isin(set(formation_dates)), ID_COLS + CHAR_COLS + MACRO_COLS]
@@ -530,43 +606,44 @@ df_form = (
     .reset_index(drop=True)
 )
 
-# ── 2. Imputation — one vectorised groupby instead of 180 per-month loops ─────
+# Step 2: Impute missing stock characteristics using the cross-sectional median
+# within each month (standard practice — avoids look-ahead bias).
 cs_med = df_form.groupby("date")[CHAR_COLS].transform("median")
 df_form[CHAR_COLS] = df_form[CHAR_COLS].fillna(cs_med)
 
-# Macros are date-level (same for every stock in a month): fill within month,
-# then forward-fill any month that was entirely missing.
+# Macro variables are the same for every stock in a given month, so we
+# forward-fill any entirely missing months from the most recent available value.
 df_form[MACRO_COLS] = df_form.groupby("date")[MACRO_COLS].transform("first")
 df_form[MACRO_COLS] = df_form[MACRO_COLS].ffill()
 df_form = df_form.dropna(subset=MACRO_COLS).reset_index(drop=True)
 
-# ── 3. SIC dummies ────────────────────────────────────────────────────────────
+# Step 3: Create 9 SIC industry dummies (Agriculture dropped as reference category).
+# The categorical type ensures all 10 industry columns are always present even if
+# a given month has no stocks in a particular industry.
 df_form["sic_division"] = sic2_to_division(df_form["sic2"])
 sic_dummies = pd.get_dummies(
     pd.Categorical(df_form["sic_division"], categories=SIC_CATS_SORTED),
     prefix="sic", drop_first=True, dtype=float,
 )
 
-# ── 4. Interaction terms via numpy broadcasting — no Python loop ───────────────
-# IXN_COLS uses product(CHAR_COLS, MACRO_COLS) — defined in setup, same order
-# as the nested for-loop used in MA2 training so RF column names match exactly.
-# (N, 10, 1) × (N, 1, 4) → (N, 10, 4) → reshape to (N, 40): all 40 products
-# computed in a single numpy operation instead of 40 Python assignments.
+# Step 4: Build all 10×4 = 40 characteristic × macro interaction terms at once
+# using numpy broadcasting.  The column order matches IXN_COLS which was pre-computed
+# in the setup chunk using the same product() order as MA2 training.
 chars_arr = df_form[CHAR_COLS].to_numpy()
 macro_arr = df_form[MACRO_COLS].to_numpy()
 ixn_arr   = (chars_arr[:, :, None] * macro_arr[:, None, :]).reshape(len(df_form), -1)
 
-# ── 5. Assemble and predict in a single batch call ────────────────────────────
+# Step 5: Assemble the full feature matrix (10 chars + 40 interactions + 9 SIC dummies)
+# and call rf_model.predict once across all 180 months — far faster than a per-month loop.
 X_all = pd.concat([
     df_form[["permno", "date"] + CHAR_COLS].reset_index(drop=True),
     pd.DataFrame(ixn_arr, columns=IXN_COLS),
     sic_dummies.reset_index(drop=True),
 ], axis=1).fillna(0.0)
 
-# One rf_model.predict call across all months — ~180× less Python overhead
-# than the previous per-month loop.
 mu_hat_all = rf_model.predict(X_all.drop(columns=["permno", "date"]))
 
+# Store predictions as a long DataFrame indexed by (permno, date) for fast lookup
 mu_predictions = X_all[["permno", "date"]].assign(mu_hat=mu_hat_all)
 ```
 
@@ -604,11 +681,20 @@ mu_dict = {
 
 
 def get_w_plus_vec(prev_w, prev_permnos, curr_permnos, drift):
+    """
+    Compute the pre-rebalancing weight vector ω⁺_t for the current universe.
+    After holding the previous portfolio for one month, prices move and weights
+    drift: ω⁺_i = ω_{i,t-1} · (1 + r_{i,t}) / Σⱼ ωⱼ(1 + rⱼ).
+    Stocks that enter the universe this month get weight zero (new positions).
+    At t=0 (no prior portfolio), we initialise to equal weights.
+    """
     N = len(curr_permnos)
     if prev_w is None or prev_permnos is None:
-        return np.ones(N) / N
+        return np.ones(N) / N  # first period: no prior holdings, start equal-weight
+    # Apply price drift to last month's weights
     prev_ser = pd.Series(prev_w, index=prev_permnos)
     drifted  = prev_ser * drift.reindex(prev_permnos, fill_value=1.0)
+    # Align to the current universe (fill missing stocks with 0, drop exited stocks)
     w_plus   = drifted.reindex(curr_permnos, fill_value=0.0).values
     total    = w_plus.sum()
     return w_plus / total if total > 1e-12 else np.ones(N) / N
@@ -762,9 +848,11 @@ print(f"Backtest complete: {len(bt)} monthly observations.")
 #| cache: false
 #| tbl-cap: "Out-of-sample performance statistics (January 2010 – December 2024). Net excess returns subtract the quadratic TC from the optimisation objective. Sharpe ratios and mean excess returns are annualised (×12 and ×$\\sqrt{12}$ respectively)."
 
-def sr(r):        return r.mean() / r.std() * np.sqrt(MONTHS_PER_YEAR)
-def ann_mean(r):  return r.mean() * MONTHS_PER_YEAR
+# Helper functions to annualise performance metrics from monthly return series
+def sr(r):        return r.mean() / r.std() * np.sqrt(MONTHS_PER_YEAR)  # annualised Sharpe
+def ann_mean(r):  return r.mean() * MONTHS_PER_YEAR                      # annualised mean
 
+# Build one summary row per strategy, referencing the backtest result columns
 rows = [
     {
         "Strategy":              s,
@@ -780,6 +868,7 @@ rows = [
     ]
 ]
 
+# Render as a markdown table so it appears formatted in the PDF output
 summary = pd.DataFrame(rows).set_index("Strategy")
 display(Markdown(summary.to_markdown()))
 ```
@@ -789,11 +878,14 @@ display(Markdown(summary.to_markdown()))
 #| cache: false
 #| fig-cap: "Cumulative net excess return of the four strategies (January 2010 – December 2024). Starting value normalised to 1."
 
+# Compute cumulative gross return by compounding (1 + monthly net return) over time.
+# Then reshape from wide to long format so ggplot can colour by strategy.
 cum_df = (
     (1 + bt[["r_naive","r_tc_mv","r_tc_mv_lw","r_constrained"]])
     .cumprod()
     .reset_index()
     .melt(id_vars="date", var_name="Strategy", value_name="Cumulative return")
+    # Replace internal column names with readable strategy labels for the legend
     .assign(Strategy=lambda d: d["Strategy"].map({
         "r_naive":       "Naive (1/N)",
         "r_tc_mv":       "TC-MV (factor Σ)",
@@ -802,6 +894,7 @@ cum_df = (
     }))
 )
 
+# Line chart of cumulative wealth paths — visual complement to the summary table
 (
     ggplot(cum_df, aes(x="date", y="Cumulative return", color="Strategy"))
     + geom_line(size=0.6)
@@ -812,11 +905,54 @@ cum_df = (
 ).draw()
 ```
 
-The results show whether penalising deviations from $\omega_t^+$ (through $\lambda$) helps after costs relative to naive diversification, and whether the choice of covariance estimator matters for out-of-sample performance. The short-sale constrained portfolio implicitly regularises $\hat\Sigma^{LW}$ further, as shown by @jagannathan2003: imposing non-negativity constraints is equivalent to shrinking the estimated covariance toward a factor structure that ignores negative correlations. Whether this constitutes a *true* out-of-sample experiment is debatable: the ML model's hyperparameters were chosen using data that partly overlaps the backtest window, so it is best described as a *pseudo-out-of-sample* evaluation rather than a fully clean holdout test.
+```{python}
+#| label: ex5-discussion
+#| cache: false
+
+# Pull the key performance numbers from the backtest results and render them
+# as inline markdown text so the discussion always reflects the actual computed values.
+strat_labels = {
+    "r_naive":       "Naive (1/N)",
+    "r_tc_mv":       "TC-MV (factor Σ)",
+    "r_tc_mv_lw":    "TC-MV LW",
+    "r_constrained": "SS-constrained MV",
+}
+ret_cols = list(strat_labels.keys())
+to_cols  = ["to_naive", "to_tc_mv", "to_tc_mv_lw", "to_constrained"]
+
+sharpes   = {strat_labels[c]: round(sr(bt[c]),       2) for c in ret_cols}
+ann_means = {strat_labels[c]: round(ann_mean(bt[c]) * 100, 2) for c in ret_cols}
+turnovers = {strat_labels[k]: round(bt[v].mean(), 3)
+             for k, v in zip(ret_cols, to_cols)}
+
+best_sr   = max(sharpes,   key=sharpes.get)
+worst_sr  = min(sharpes,   key=sharpes.get)
+best_ret  = max(ann_means, key=ann_means.get)
+
+# Covariance comparison: TC-MV factor vs TC-MV LW
+sr_diff   = abs(sharpes["TC-MV (factor Σ)"] - sharpes["TC-MV LW"])
+to_factor = turnovers["TC-MV (factor Σ)"]
+to_lw     = turnovers["TC-MV LW"]
+
+display(Markdown(
+    f"After transaction costs, **{best_sr}** achieves the highest annualised Sharpe ratio "
+    f"({sharpes[best_sr]:.2f}), while **{worst_sr}** produces the lowest ({sharpes[worst_sr]:.2f}). "
+    f"The TC-adjusted strategies do {'better' if sharpes['TC-MV LW'] > sharpes['Naive (1/N)'] else 'not better'} "
+    f"than naive diversification after costs, suggesting that the return signal from the RF model "
+    f"{'adds value' if sharpes['TC-MV LW'] > sharpes['Naive (1/N)'] else 'does not add enough value to overcome estimation error'}. "
+    f"Regarding the covariance estimator, the Sharpe ratio difference between TC-MV (factor $\\hat{{\\Sigma}}$) "
+    f"({sharpes['TC-MV (factor Σ)']:.2f}) and TC-MV LW ({sharpes['TC-MV LW']:.2f}) is only "
+    f"{sr_diff:.2f}, indicating that the choice of covariance estimator has "
+    f"{'a modest' if sr_diff < 0.1 else 'a meaningful'} impact on performance; "
+    f"average monthly turnover is {to_factor:.3f} for the factor model versus {to_lw:.3f} for LW."
+))
+```
+
+The short-sale constrained portfolio implicitly regularises $\hat\Sigma^{LW}$ further, as shown by @jagannathan2003: imposing non-negativity constraints is equivalent to shrinking negative off-diagonal covariance elements to zero. This experiment is best described as **pseudo-out-of-sample**: the RF model's hyperparameters were tuned on data that partly overlaps the 2010–2024 evaluation window, so the backtest does not constitute a fully clean holdout test.
 
 ## 6
 
-*Insert 2–3 sentence personal reflection on Cilie Feldager's lecture here. This section does not count toward the page limit.*
+How banks and especially Danske Bank think of the use of LLMs and AIs when it comes to building systems which is secure and scalable. And how important the princible evaluations is for testing the models and systems in place. Also the process from idea to implementation and the value of relations and networks in the industry.
 
 ## Conclusion
 
