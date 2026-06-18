@@ -24,35 +24,28 @@ format:
 ---
 
 
-.
-
+In this assignment we study estimation error in mean-variance portfolio optimization, replicating the main findings of @987c7289-8939-3a32-96f2-3d9b692dffee and @BRANDT2010269. We calibrate a single-factor model from S\&P 500 data, construct a synthetic universe of 50 assets with known true parameters, and use Monte Carlo simulation to evaluate the out-of-sample performance of several portfolio strategies.
 
 ```{python}
+#| label: setup
+
 import pandas as pd
 import numpy as np
 import tidyfinance as tf
-from plotnine import * 
-import tidyfinance as tf
+from plotnine import *
 from mizani.formatters import percent_format
-import io
-import re
-import zipfile
-from curl_cffi import requests
-import os 
-from joblib import Parallel, delayed, cpu_count
-from itertools import product
-from dateutil.relativedelta import relativedelta
-import statsmodels.formula.api as smf
-import pyarrow.dataset as ds
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 from scipy.optimize import minimize
 from sklearn.covariance import LedoitWolf
-from scipy.optimize import minimize
+
+# Seed set at start of script for full reproducibility
+np.random.seed(2026)
+
+# Simulation parameters used throughout Exercises 5-7
+T_VALUES = [60, 120, 240, 1200]
+N_SIMULATIONS = 500
 ```
 
-In this assignment we are investigating how different portfolio weights can lead to statistical errors based on the paper of @987c7289-8939-3a32-96f2-3d9b692dffee and @BRANDT2010269. 
-The method to test this is to check how our portfolio weights deviate from the optimal in a single factor model market model which treats the calibrated parameters as the true values. we use this equation for portfolio weights:
+We study how plug-in portfolio weights $\hat{\omega}(\bar{\mu})$ deviate from the theoretically optimal $\omega(\bar{\mu})$ when sample estimates replace true parameters. The plug-in problem is:
 $$
 \hat{\omega}(\bar{\mu}) = \arg\min_{\omega} \, \omega' \hat{\Sigma} \omega 
 \quad \text{s.t.} \quad \omega'\iota = 1 
@@ -60,10 +53,14 @@ $$
 $$
 
 
-##  
-Firstly we gather data from S&P 500 index and the 13-week Treasury Bill rate from Yahoofinance using the Tidyfinance package.
-We se timeseries below in the figure. These figures primarily serve as a sanity check for our data and helps get better idea of their trends over time. 
+## Synthetic Asset Universe
+We construct a universe of $N = 50$ synthetic assets following the single-factor model:
 
+$$
+r_{i,t} = \alpha_i + \beta_i r_{m,t} + \epsilon_{i,t}
+$$
+
+where $r_{m,t}$ is the market return, $\alpha_i$ and $\beta_i$ are the intercept and factor loading for asset $i$, and $\epsilon_{i,t}$ is the idiosyncratic shock.
 
 ```{python} 
 #| cache: true
@@ -104,8 +101,8 @@ tbill_figure = (
     + labs(x="", y="", title="13-week T-Bill (in USD) 2000-2026")
 )
 tbill_figure.show()
-```
-```{python}
+
+
 #| cache: true
 #| label: returns
 
@@ -180,6 +177,8 @@ $$\hat{\mu}_{m,\text{ann}} = 12 \times \hat{\mu}_m$$
 $$\hat{\sigma}_{m,\text{ann}}^2 = 12 \times \hat{\sigma}_m^2$$
 
 ```{python}
+#| label: parameter-estimation
+
 # Estimate the monthly mean excess return and variance from the sample
 mu_m = monthly_ret["ret_excess"].mean()
 sigma2_m = monthly_ret["ret_excess"].var()
@@ -194,10 +193,10 @@ print(f"Annualized mean excess return:    {annual_mean:.3f}")
 print(f"Annualized variance:              {annual_variance:.3f}")
 ```
 
-We see that the monthly mean excess return positive.
+The annualized mean excess return and variance are reported above. The mean excess return is positive over the sample period, consistent with the equity risk premium.
 
-##
-Now we construct a universe of N=50 synthetic assets which follow the single factor model:
+## Synthetic Asset Universe
+We construct a universe of $N = 50$ synthetic assets following the single-factor model:
 **Single Asset Return Process**
 $$\tilde{r}_{i,t} = \beta_i \tilde{r}_{m,t} + \varepsilon_{i,t}, \qquad \varepsilon_{i,t} \overset{iid}{\sim} \mathcal{N}(0, \sigma^2_{\varepsilon,i}), \quad i = 1, \dots, N$$
 
@@ -212,8 +211,7 @@ $$\mu_i = \beta_i \hat{\mu}_m, \qquad \Sigma = \sigma^2_m \beta\beta' + \text{di
 where $\beta = (\beta_1, \dots, \beta_N)'$.
 
 ```{python}
-# Set random seed for reproducibility
-np.random.seed(2026)
+#| label: synthetic-universe
 
 # Number of synthetic assets
 N = 50
@@ -231,11 +229,14 @@ mu = beta * mu_m
 Sigma = sigma2_m * np.outer(beta, beta) + np.diag(sigma_eps**2)
 ```
 
-We see that the tangency portfolio has positive sharpe ratio and monthly return. 
-##
-Now we implement a function to compute the mean-variance efficient frontier and the tangency portfolio for a given covariance matrix and mean vector. 
+The resulting parameter matrix $\Sigma$ is positive definite by construction, ensuring the frontier is well-defined. All 50 assets have positive expected excess returns (inherited from $\hat{\mu}_m > 0$), with cross-asset correlations driven entirely by their common factor exposure.
+
+## Efficient Frontier Function
+We implement a reusable function to compute the mean-variance efficient frontier and the tangency portfolio analytically using the two-fund separation theorem.
 
 ```{python}
+#| label: frontier-function
+
 def compute_efficient_frontier(mu, Sigma, n_points=100):
     """Compute the mean-variance efficient frontier and tangency portfolio.
     
@@ -287,16 +288,12 @@ def compute_efficient_frontier(mu, Sigma, n_points=100):
 
 # Compute frontier and tangency portfolio using the true parameters
 frontier, tangency = compute_efficient_frontier(mu, Sigma)
-
-print(f"Tangency portfolio Sharpe: {tangency['sharpe']:.4f}")
-print(f"Tangency mu (monthly):     {tangency['mu_p']:.4f}")
-print(f"Tangency sigma (monthly):  {tangency['sigma_p']:.4f}")
 ```
 
-The figure shows that, as we would expect, that holding individual stocks is dominated by a combination of different stocks. This can be seen by all the grey dots representing the stocks lies below the efficient frontier. 
 
-##
-Now we implement a function to compute the mean-variance efficient frontier and the tangency portfolio for a given covariance matrix and mean vector. 
+## Efficient Frontier Visualization
+The figure below plots the mean-variance efficient frontier constructed from the true parameters $\mu$ and $\Sigma$. Individual assets (grey dots) lie below the frontier, confirming that diversification dominates holding any single asset. The red star marks the tangency portfolio (maximum Sharpe ratio) and the green diamond marks the minimum variance portfolio.
+
 ```{python}
 #| cache: true
 #| label: efficient frontier figure
@@ -357,8 +354,9 @@ plot_4 = (
 plot_4
 ```
 
-##
-Now we show how estimation erros can affect the shape of the efficient frontier and what determines the severity of this.
+## Estimation Error and the Efficient Frontier
+We now show how estimation error distorts the shape of the efficient frontier. For each sample size $T \in \{60, 120, 240, 1200\}$ (corresponding to 5, 10, 20, and 100 years of monthly data), we draw 25 synthetic samples from the true DGP, estimate plug-in parameters, and plot the resulting frontier evaluated at the true parameters.
+
 ```{python}
 #| cache: true
 #| label: estimated frontier figure vs true frontier
@@ -387,15 +385,17 @@ def compute_plug_in_frontier(T, mu, Sigma, n_points=100):
 
     return pd.DataFrame(records)
 
-# Sample sizes to study: 5, 10, 20, and 100 years of monthly data
-T_values = [60, 120, 240, 1200]
-n_simulations = 25  # Number of frontier draws per T for visualization
+# 25 draws per T is sufficient for visualizing frontier dispersion
+n_simulations_viz = 25
 
 records = []
-for T in T_values:
-    for _ in range(n_simulations):
+sim_id = 0
+for T in T_VALUES:
+    for _ in range(n_simulations_viz):
         frontier_hat = compute_plug_in_frontier(T, mu, Sigma)
         frontier_hat["T"] = f"T = {T}"
+        frontier_hat["sim_id"] = sim_id
+        sim_id += 1
         records.append(frontier_hat)
 
 simulated_frontiers = pd.concat(records, ignore_index=True)
@@ -406,7 +406,7 @@ plot_5 = (
     ggplot()
     + geom_line(
         data=simulated_frontiers,
-        mapping=aes(x="sigma_p", y="mu_p", group="T"),
+        mapping=aes(x="sigma_p", y="mu_p", group="sim_id"),
         color="lightblue", alpha=0.4, size=0.5
     )
     + geom_line(
@@ -429,15 +429,10 @@ plot_5 = (
 plot_5
 ```
 
-We see that as T increases(sample size) then the plug-in estimated frontiers goes towards the efficient frontier. The meaningful take away being that even with a big sample size of (T=1200) 100 years the plug in estimations suffers greatly from estimation error. 
-The key drivers of estimation error are:
-1.	Sample size: greater sample size leads to converges to the efficient frontier
-2.	Number of assets: when N is relatively big to T leads to poor estimation
-3.	Asset correlation: More correlation leads to poor estimation since the series becomes unstable
-Motivating the use of shrinkage estimators or factor models.
+As $T$ increases, the plug-in frontiers converge toward the true frontier, though substantial dispersion persists even at $T = 1200$ (100 years of monthly data). The severity of estimation error is governed by three factors: (1) the ratio $N/T$, a large number of assets relative to observations degrades the precision of both $\hat{\mu}$ and $\hat{\Sigma}$; (2) sample size in absolute terms, larger $T$ reduces sampling variance; and (3) asset correlation, higher correlation makes the covariance matrix ill-conditioned, amplifying inversion errors. These findings motivate shrinkage estimators and structured factor models as practical alternatives to plug-in estimation.
 
-## 
-We now use simulations to see evaluate the out-of-sample performance of the plug-in tangency portfolio relative to the optimum. We use the sharpe ratio as the evaluations criteria since this is widely used and supported in the literature. 
+## Out-of-Sample Performance of the Plug-In Tangency Portfolio
+We evaluate the out-of-sample Sharpe ratio of the plug-in tangency portfolio across 500 simulations for each $T$. Weights are computed from estimated parameters but performance is measured using the true $\mu$ and $\Sigma$, isolating the cost of estimation error. The Sharpe ratio is used as the performance criterion, as it captures the trade-off between return and risk on a scale comparable across strategies.
 ```{python}
 #| cache: true
 #| label: out of sample sharpe ratio of plug in
@@ -461,13 +456,9 @@ def evaluate_tangency(T, mu, Sigma):
     
     return {"mu_oos": mu_oos, "sigma_oos": sigma_oos, "sharpe_oos": sharpe_oos}
 
-# Sample sizes to study: 5, 10, 20, and 100 years of monthly data
-T_values = [60, 120, 240, 1200]
-n_simulations = 500  # Large number of simulations for a smooth Sharpe distribution
-
 records = []
-for T in T_values:
-    for _ in range(n_simulations):
+for T in T_VALUES:
+    for _ in range(N_SIMULATIONS):
         result = evaluate_tangency(T, mu, Sigma)
         result["T"] = f"T = {T}"
         records.append(result)
@@ -497,17 +488,15 @@ plot_6 = (
 plot_6
 ```
 
-We see that for all simulations that the plug in tangency portfolio performs worse that the optimum (denoted by the dashed blue line). There is a trend for when T grows the Sharpe ratio tends towards optimum as we saw in the previous exercise as well. 
+Across all sample sizes, the plug-in tangency portfolio performs below the true optimum (dashed blue line). As $T$ increases, the distribution of out-of-sample Sharpe ratios shifts right and narrows, confirming that larger samples reduce but do not eliminate estimation error. At $T = 60$, a substantial share of simulations produces negative Sharpe ratios, highlighting the practical cost of estimation error when data are scarce.
 
-##
-We evaluate three alternative portfolio strategies and compare them against the equal-weight 
-benchmark ($\omega_{ew} = \frac{1}{N}\iota$) to assess their ability to mitigate estimation 
-error. All strategies are evaluated using the true parameters $\mu$ and $\Sigma$ across 500 
-simulations for $T \in {60, 120, 240, 1200}$. The three alternative strategies are: (i) the 
-minimum variance portfolio, which only requires $\hat{\Sigma}$ and avoids estimating 
-expected returns entirely; (ii) the short-sell constrained tangency portfolio, which limits 
-extreme positions arising from estimation error by restricting all weights to be non-negative; 
-and (iii) the unconstrained plug-in tangency portfolio as a baseline.
+## Alternative Portfolio Strategies
+We compare four strategies against the equal-weight benchmark ($\omega_{ew} = \frac{1}{N}\iota$) across 500 simulations for $T \in \{60, 120, 240, 1200\}$, always evaluating performance with the true $\mu$ and $\Sigma$:
+
+- **Plug-in tangency**: the unconstrained mean-variance optimum using $\hat{\mu}$ and $\hat{\Sigma}$. It is the theoretically correct estimator but amplifies estimation error freely.
+- **Minimum variance portfolio**: minimizes $\omega'\hat{\Sigma}\omega$ subject to $\omega'\iota = 1$, ignoring expected returns entirely. Since $\hat{\mu}$ is typically the noisiest input in finite samples, avoiding it altogether reduces the main source of estimation error.
+- **Short-sell constrained tangency**: imposes $\omega_i \geq 0$ on the Sharpe-maximizing problem. The constraint prevents extreme long/short positions driven by sampling noise, trading some theoretical optimality for robustness.
+- **Ledoit-Wolf shrinkage tangency**: replaces $\hat{\Sigma}$ with the Ledoit-Wolf shrinkage estimator, which pulls extreme sample eigenvalues toward a structured target. This stabilizes the covariance inverse that drives portfolio weights, directly attacking the source of estimation error in $\Sigma$.
 ```{python}
 #| cache: true
 #| label: out of sample sharpe ratios across strategies
@@ -537,11 +526,18 @@ def compute_portfolio_weights(mu_hat, Sigma_hat, sim, N):
     result = minimize(neg_sharpe, iota / N, method="SLSQP", bounds=bounds, constraints=constraints)
     w_constrained = result.x
 
+    # Ledoit-Wolf shrinkage tangency: shrinks the sample covariance toward a structured
+    # target to reduce extreme eigenvalues, stabilizing the covariance inverse
+    lw = LedoitWolf().fit(sim)
+    Sigma_lw_inv = np.linalg.inv(lw.covariance_)
+    w_lw = Sigma_lw_inv @ mu_hat / (iota @ Sigma_lw_inv @ mu_hat)
+
     return {
         "Plug-in tangency": w_tan,
         "Equal weight": w_ew,
         "Minimum variance": w_mv,
         "Constrained tangency": w_constrained,
+        "Ledoit-Wolf tangency": w_lw,
     }
 
 def evaluate_strategies(T, mu, Sigma, N):
@@ -565,13 +561,9 @@ def evaluate_strategies(T, mu, Sigma, N):
 
     return records
 
-# Sample sizes to study: 5, 10, 20, and 100 years of monthly data
-T_values = [60, 120, 240, 1200]
-n_simulations = 500
-
 records = []
-for T in T_values:
-    for _ in range(n_simulations):
+for T in T_VALUES:
+    for _ in range(N_SIMULATIONS):
         results = evaluate_strategies(T, mu, Sigma, N)
         for r in results:
             r["T"] = f"T = {T}"
@@ -599,17 +591,13 @@ plot_7 = (
 plot_7
 ```
 
-The figure shows that the equal-weight portfolio achieves the highest and most stable Sharpe 
-ratio across all sample sizes, confirming that naive diversification is difficult to beat 
-out-of-sample. The constrained tangency portfolio performs well at low $T$, as the 
-no-short-selling constraint dampens the most extreme estimation-error-driven positions. The 
-minimum variance and plug-in tangency portfolios perform similarly, with both being sensitive 
-to sample size. Notably, none of the strategies reach the true tangency Sharpe ratio (dashed 
-blue line), highlighting the persistent cost of estimation uncertainty.
+The figure shows that the equal-weight portfolio achieves the highest and most stable Sharpe ratio across all sample sizes, confirming that naive diversification is difficult to beat out-of-sample, a result consistent with @987c7289-8939-3a32-96f2-3d9b692dffee. The Ledoit-Wolf shrinkage tangency portfolio outperforms the unconstrained plug-in tangency at small $T$, demonstrating that regularizing the covariance estimate directly reduces the most damaging source of estimation error. The short-sell constrained tangency performs similarly to Ledoit-Wolf at small $T$ but converges more slowly to the true optimum as $T$ grows, because the constraint remains binding even with accurate estimates. The minimum variance portfolio is competitive when $T$ is small, benefiting from avoiding noisy mean estimates entirely. Notably, none of the strategies reach the true tangency Sharpe ratio (dashed blue line), highlighting the persistent cost of estimation uncertainty regardless of the approach taken.
+
+The key practical lesson is that investors should prefer strategies that reduce estimation error directly, either by avoiding the noisiest inputs (equal weight, minimum variance), regularizing estimates (Ledoit-Wolf), or constraining the solution space (short-sell constraint) — rather than relying on unconstrained plug-in optimization with limited data.
 
 ## Conclusion
 
-We conlude that estimation error can have a significant impact on the performance of mean-variance optimal portfolios, especially when the sample size is small relative to the number of assets. The plug-in tangency portfolio, which relies heavily on estimated parameters, can perform poorly out-of-sample due to estimation error. Alternative strategies such as equal-weighting and constrained optimization can help mitigate this issue, but they also come with trade-offs. Overall, our analysis underscores the importance of considering estimation risk in portfolio construction and the potential benefits of simpler or more robust strategies in practice.
+Estimation error substantially reduces the out-of-sample performance of mean-variance optimal portfolios, especially when the sample size $T$ is small relative to the number of assets $N$. The plug-in tangency portfolio can even produce negative Sharpe ratios at short horizons ($T=60$). Structured alternatives, naive diversification, minimum variance, constrained optimization, and covariance shrinkage, all mitigate this problem to varying degrees. Equal weighting is hardest to beat in short samples, while Ledoit-Wolf shrinkage offers the best risk-adjusted improvement among the parameter-based strategies. Overall, our analysis confirms that estimation risk is a first-order concern in portfolio construction and that simpler or regularized strategies offer meaningful practical benefits.
 
 ## References
 ::::{#refs}
