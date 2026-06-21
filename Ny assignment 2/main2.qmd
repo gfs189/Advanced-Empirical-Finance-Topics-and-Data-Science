@@ -14,6 +14,7 @@ format:
     geometry:
       - top=20mm
       - left=20mm
+      - left=20mm
       - bottom=20mm
       - right=20mm
     cite-method: natbib
@@ -41,7 +42,6 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_squared_error
-from tidyfinance.core import assign_portfolio, compute_breakpoints, breakpoint_options
 import joblib
 
 # the _dir resolves to the folder containing this .qmd file.
@@ -56,7 +56,8 @@ WINSORIZE_CUT        = 0.025   # Tail fraction for winsorisation (2.5% each side
 TRAIN_FRAC           = 0.60    # Fraction of months used for training
 VAL_FRAC             = 0.80    # Cumulative fraction used for train + validation
 N_PLOT_SAMPLE        = 50_000  # Rows sampled for characteristic distribution plot
-N_ESTIMATORS_RF      = 50      # Number of trees in random forest
+N_ESTIMATORS_RF      = 50      # Number of trees in final model
+N_ESTIMATORS_RF_TUNE = 25      # Fewer trees during grid search to cut tuning time
 RANDOM_STATE         = 42      # Global random seed for reproducibility
 NN_MAX_ITER_TUNE     = 50      # Max iterations for NN during hyperparameter tuning
 NN_MAX_ITER_FINAL    = 500     # Max iterations for final NN fit
@@ -339,6 +340,7 @@ preprocessor = ColumnTransformer(
 
 ```{python}
 #| label: ex2-tune-rf
+#| cache: true
 #| fig-cap: "Random forest validation MSE by maximum tree depth and minimum leaf size. Lower MSE indicates better out-of-sample fit on the validation period."
 #| fig-width: 6
 #| fig-height: 2.5
@@ -346,7 +348,7 @@ preprocessor = ColumnTransformer(
 # ── Part (c): Random Forest – hyperparameter tuning ──────────────────────────
 # Grid over max_depth (tree complexity) and min_samples_leaf (regularisation).
 rf_grid = [
-    {"regressor__n_estimators":    N_ESTIMATORS_RF,
+    {"regressor__n_estimators":    N_ESTIMATORS_RF_TUNE,
      "regressor__max_depth":       d,
      "regressor__min_samples_leaf": l}
     for d in [10, 20]
@@ -415,6 +417,7 @@ rf_complexity_plot.draw()
 
 ```{python}
 #| label: ex2-tune-nn
+#| cache: true
 #| fig-cap: "Neural network validation MSE by hidden layer architecture and L2 regularisation strength, faceted by initial learning rate. Lower MSE indicates better out-of-sample fit on the validation period."
 #| fig-width: 6
 #| fig-height: 2.5
@@ -535,6 +538,7 @@ We translate the return forecasts into investment strategies by sorting stocks i
 
 ```{python}
 #| label: ex3-predictions
+#| cache: true
 
 
 # ── Part (a): Generate predictions ───────────────────────────────────────────
@@ -578,51 +582,50 @@ nn_pred_test = best_nn.predict(X_test_df)
 ```{python}
 #| label: ex3-portfolios
 
-
 # ── Parts (b) & (c): Decile portfolios and long-short strategy ────────────────
 
-def build_long_short(predictions, mask):
+def assign_deciles(predictions, mask):
     """
-    Sort stocks into decile portfolios by predicted return each month using
-    tf.assign_portfolio (course standard). Compute value-weighted returns per
-    decile using lagged market cap. Returns the monthly long-short series
-    (top decile minus bottom decile) and the full decile returns.
+    Assign stocks to decile portfolios each month.
+    Uses pd.qcut on within-month ranks — vectorised C operation, equivalent to
+    assign_portfolio with compute_breakpoints but far faster at scale.
     """
-    df_ls = meta[mask].copy().reset_index(drop=True)
-    df_ls["pred"]       = predictions
-    df_ls["ret_excess"] = y[mask]
-
-    # Assign decile (1 = lowest predicted return, 10 = highest) within each month
-    df_ls["decile"] = (
-        df_ls.groupby("date", group_keys=False)
-        .apply(lambda g: assign_portfolio(
-            data=g,
-            sorting_variable="pred",
-            breakpoint_options=breakpoint_options(n_portfolios=N_PORTFOLIOS),
-            breakpoint_function=compute_breakpoints,
-        ))
+    df = meta[mask].copy().reset_index(drop=True)
+    df["pred"]       = predictions
+    df["ret_excess"] = y[mask]
+    df["decile"] = (
+        df.groupby("date")["pred"]
+        .transform(lambda x: pd.qcut(x.rank(method="first"), N_PORTFOLIOS, labels=False) + 1)
+        .astype(int)
     )
+    return df
 
-    # Value-weighted return per decile-month using lagged market capitalisation
+def build_long_short(df):
+    """
+    Compute value-weighted long-short returns from a df that already has a decile column.
+    Uses vectorised aggregation instead of groupby.apply to avoid Python-level looping.
+    """
     vw = (
-        df_ls.groupby(["date", "decile"])
-        .apply(
-            lambda g: (g["ret_excess"] * g["mktcap_lag"]).sum() / g["mktcap_lag"].sum(),
-            include_groups=False,
-        )
-        .reset_index(name="vw_ret")
+        df.assign(ret_w=lambda d: d["ret_excess"] * d["mktcap_lag"])
+        .groupby(["date", "decile"], as_index=False)
+        .agg(ret_w=("ret_w", "sum"), mktcap_lag=("mktcap_lag", "sum"))
+        .assign(vw_ret=lambda d: d["ret_w"] / d["mktcap_lag"])
     )
-
-    # Long-short: long the top decile (10), short the bottom decile (1)
     top = vw[vw["decile"] == 10].set_index("date")["vw_ret"]
     bot = vw[vw["decile"] == 1].set_index("date")["vw_ret"]
     ls  = (top - bot).rename("ls_ret").dropna()
     return ls, vw
 
-rf_ls_val,  rf_deciles_val  = build_long_short(rf_pred_val,  val_mask)
-rf_ls_test, rf_deciles_test = build_long_short(rf_pred_test, test_mask)
-nn_ls_val,  nn_deciles_val  = build_long_short(nn_pred_val,  val_mask)
-nn_ls_test, nn_deciles_test = build_long_short(nn_pred_test, test_mask)
+# Precompute deciles once per (model, period) — reused in compute_turnover
+rf_val_df  = assign_deciles(rf_pred_val,  val_mask)
+rf_test_df = assign_deciles(rf_pred_test, test_mask)
+nn_val_df  = assign_deciles(nn_pred_val,  val_mask)
+nn_test_df = assign_deciles(nn_pred_test, test_mask)
+
+rf_ls_val,  rf_deciles_val  = build_long_short(rf_val_df)
+rf_ls_test, rf_deciles_test = build_long_short(rf_test_df)
+nn_ls_val,  nn_deciles_val  = build_long_short(nn_val_df)
+nn_ls_test, nn_deciles_test = build_long_short(nn_test_df)
 ```
 
 ```{python}
@@ -697,49 +700,41 @@ display(Markdown(bench.to_markdown(index=False)))
 ```{python}
 #| label: ex3-turnover
 
-
 # ── Part (e): Portfolio turnover ──────────────────────────────────────────────
-# Monthly turnover = average fraction of the long (or short) leg replaced each
-# month. Computed as the sum of absolute value-weight changes divided by 2
-# (the divisor avoids double-counting simultaneous buys and sells).
+# Monthly turnover = average(sum |w_t - w_{t-1}|) / 2, where w=0 for stocks
+# absent from the leg. Accepts the precomputed decile df — no second decile
+# assignment needed.
 
-def compute_turnover(predictions, mask):
-    df_to = meta[mask].copy().reset_index(drop=True)
-    df_to["pred"] = predictions
-
-    df_to["decile"] = (
-        df_to.groupby("date", group_keys=False)
-        .apply(lambda g: assign_portfolio(
-            data=g,
-            sorting_variable="pred",
-            breakpoint_options=breakpoint_options(n_portfolios=N_PORTFOLIOS),
-            breakpoint_function=compute_breakpoints,
-        ))
-    )
-
-    # Retain only the top and bottom decile legs; compute value weights
-    legs = df_to[df_to["decile"].isin([1, 10])].copy()
-    legs["weight"] = legs.groupby(["date", "decile"])["mktcap_lag"].transform(
-        lambda w: w / w.sum()
+def compute_turnover(df):
+    legs = df[df["decile"].isin([1, 10])].copy()
+    legs["weight"] = (
+        legs.groupby(["date", "decile"])["mktcap_lag"]
+        .transform(lambda w: w / w.sum())
     )
     legs["side"] = legs["decile"].map({10: "long", 1: "short"})
 
     turnovers = []
     for side in ["long", "short"]:
-        sub = legs[legs["side"] == side].pivot(
-            index="date", columns="permno", values="weight"
-        ).fillna(0)
-        # Absolute month-over-month weight change, summed across stocks
-        to = sub.diff().abs().sum(axis=1) / 2
-        turnovers.append(to)
+        sub = legs[legs["side"] == side][["date", "permno", "weight"]]
+        dates = sorted(sub["date"].unique())
+        monthly_to = []
+        prev = None
+        for d in dates:
+            curr = sub[sub["date"] == d].set_index("permno")["weight"]
+            if prev is not None:
+                union = curr.index.union(prev.index)
+                delta = curr.reindex(union).fillna(0) - prev.reindex(union).fillna(0)
+                monthly_to.append(delta.abs().sum() / 2)
+            prev = curr
+        turnovers.append(np.mean(monthly_to) if monthly_to else 0.0)
 
-    avg_turnover = pd.concat(turnovers, axis=1).mean(axis=1)
-    return avg_turnover.mean()
+    return np.mean(turnovers)
 
-rf_to_val  = compute_turnover(rf_pred_val,  val_mask)
-rf_to_test = compute_turnover(rf_pred_test, test_mask)
-nn_to_val  = compute_turnover(nn_pred_val,  val_mask)
-nn_to_test = compute_turnover(nn_pred_test, test_mask)
+# Reuse precomputed decile dfs from ex3-portfolios — no redundant decile assignment
+rf_to_val  = compute_turnover(rf_val_df)
+rf_to_test = compute_turnover(rf_test_df)
+nn_to_val  = compute_turnover(nn_val_df)
+nn_to_test = compute_turnover(nn_test_df)
 
 turnover_df = pd.DataFrame({
     "Model":             ["RF", "RF", "NN", "NN"],
@@ -802,9 +797,10 @@ for predictor, cols in predictor_groups.items():
         X_ablated = X_test_df.copy()
         X_ablated[cols] = train_means[cols].values
 
-        pred_ablated    = pipeline.predict(X_ablated)
-        ls_ablated, _   = build_long_short(pred_ablated, test_mask)
-        sharpe_drop     = baseline - annualised_sharpe(ls_ablated)
+        pred_ablated  = pipeline.predict(X_ablated)
+        ablated_df    = assign_deciles(pred_ablated, test_mask)
+        ls_ablated, _ = build_long_short(ablated_df)
+        sharpe_drop   = baseline - annualised_sharpe(ls_ablated)
 
         importance_records.append({
             "Model":       model_name,
