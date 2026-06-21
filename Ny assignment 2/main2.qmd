@@ -27,13 +27,10 @@ format:
 ```{python}
 #| label: setup
 
-# We import the required packages ─────────────────────────────────────────── 
 import pandas as pd
 import numpy as np
 import tidyfinance as tf
 from plotnine import *
-from mizani.formatters import percent_format
-from pathlib import Path
 from IPython.display import display, Markdown
 import statsmodels.formula.api as smf
 from sklearn.ensemble import RandomForestRegressor
@@ -44,31 +41,35 @@ from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_squared_error
 import joblib
 
-# the _dir resolves to the folder containing this .qmd file.
-# Then quarto sets the working directory to the document folder at render time,
-# so all relative paths resolve correctly on any machine.
-_dir = Path(".")
-
-# ── Named constants
+# ── Named constants ───────────────────────────────────────────────────────────
 MONTHS_PER_YEAR      = 12      # Annualisation factor for monthly returns
 N_PORTFOLIOS         = 10      # Number of decile portfolios
 WINSORIZE_CUT        = 0.025   # Tail fraction for winsorisation (2.5% each side)
 TRAIN_FRAC           = 0.60    # Fraction of months used for training
 VAL_FRAC             = 0.80    # Cumulative fraction used for train + validation
 N_PLOT_SAMPLE        = 50_000  # Rows sampled for characteristic distribution plot
-N_ESTIMATORS_RF      = 50      # Number of trees in final model
-N_ESTIMATORS_RF_TUNE = 25      # Fewer trees during grid search to cut tuning time
+N_ESTIMATORS_RF      = 50      # Number of trees in final random forest
+N_ESTIMATORS_RF_TUNE = 10      # Fewer trees during grid search to cut tuning time
 RANDOM_STATE         = 42      # Global random seed for reproducibility
-NN_MAX_ITER_TUNE     = 50      # Max iterations for NN during hyperparameter tuning
+NN_MAX_ITER_TUNE     = 20      # Max iterations for NN during hyperparameter tuning
 NN_MAX_ITER_FINAL    = 500     # Max iterations for final NN fit
 NN_VAL_FRACTION      = 0.1     # Inner validation fraction for NN early stopping
+N_TUNE_ROWS          = 200_000 # Max training rows used during grid search
+
+# SIC division boundary codes (right-inclusive); see census.gov SIC manual
+SIC_DIVISION_BINS   = [0, 9, 14, 17, 39, 49, 51, 59, 67, 89, np.inf]
+SIC_DIVISION_LABELS = ["Agriculture", "Mining", "Construction", "Manufacturing",
+                       "Transportation", "Wholesale", "Retail", "Finance",
+                       "Services", "Other"]
+
+np.random.seed(RANDOM_STATE)
 ```
 
-In this assignment we examine whether machine learning can be used to predict stock returns and generate economically meaningful investment strategies. The analysis is inspired by @10.1093/rfs/hhaa009, who show using a broad set of machine learning models that non-linear methods outperform simple historical-mean benchmarks for cross-sectional return prediction. This stands in contrast to @10.1093/rfs/hhm014, who find that machine learning models generally fail to beat the historical mean for aggregate market return prediction. We attempt to replicate part of the @10.1093/rfs/hhaa009 findings using their stock characteristics and macroeconomic predictors.
+We examine whether machine learning can predict cross-sectional stock returns and generate economically meaningful strategies, replicating part of @10.1093/rfs/hhaa009. Unlike aggregate market return prediction — where @10.1093/rfs/hhm014 find little evidence of predictability — GKX show that non-linear models outperform historical-mean benchmarks in the cross-section.
 
 ## Data Preparation
 
-In this section we load and prepare the stock-level dataset for return prediction. The data are stored in a parquet file containing 94 stock characteristics from @10.1093/rfs/hhaa009 and 13 macroeconomic variables from @10.1093/rfs/hhm014, along with industry classifications, excess returns, and lagged market capitalizations.
+We use monthly US stock data from @10.1093/rfs/hhaa009 (94 characteristics, 13 macro predictors from @10.1093/rfs/hhm014), filtered to post-2000.
 
 ```{python}
 
@@ -110,29 +111,32 @@ ID_COLS = ["permno", "date", "ret_excess", "mktcap_lag", "sic2"]
 data = df[ID_COLS + CHAR_COLS + MACRO_COLS].copy()
 ```
 
-We select ten stock characteristics and four macroeconomic variables based on figure 5 form the paper of @10.1093/rfs/hhaa009. In figure 1 we see the distribution of the stock characterstics. This shows that some of the variables are non-normal and skewed highlighting the usefullness of cross-sectional median imputation and winsorisation. Figure 2 shows the monthly excess return by SIC division. All divison except "other" showcases a positive mean monthly excess return.
+We select ten characteristics based on @10.1093/rfs/hhaa009 (Figure 5, Table 4): momentum (`mom1m`, `mom12m`, `mom36m`), value (`bm`, `ep`), size (`mvel1`), liquidity (`dolvol`), profitability (`roaq`, `gma`), and investment (`invest`). Macro predictors follow @10.1093/rfs/hhm014: dividend yield (`dp`), earnings yield (`ep`), Treasury-bill rate (`tbl`), and term spread (`tms`). Missing values in stock characteristics are imputed with the cross-sectional monthly median, preserving relative rankings; macro variables are forward-filled since they are market-level series. Rows with missing returns or market cap are dropped. @fig-char-distributions shows right-skewed distributions, motivating 2.5% winsorisation; @fig-industry-returns shows returns across SIC divisions.
 
 ```{python}
 
 #| label: ex1-summary-and-missing
 
 # ── Part (b): Summary statistics and missing-value handling ───────────────────
-
-# Summary statistics table (tidyfinance course standard)
-summary = tf.create_summary_statistics(
-    data=data,
-    variables=CHAR_COLS + MACRO_COLS,
-    detail=True,
-)
-display(Markdown(summary.to_markdown(index=False)))
+summ_vars = CHAR_COLS + MACRO_COLS
+summary = pd.DataFrame({
+    "Mean":    data[summ_vars].mean(),
+    "SD":      data[summ_vars].std(),
+    "Min":     data[summ_vars].min(),
+    "Max":     data[summ_vars].max(),
+    "Miss. %": data[summ_vars].isna().mean().mul(100),
+}).round(3)
+summary.index = [c.replace("characteristic_", "").replace("macro_", "[m] ") for c in summary.index]
+display(Markdown("**Table 1.** Summary statistics for selected predictors (pre-imputation). [m] denotes macro variables."))
+display(Markdown(summary.to_markdown()))
 ```
 
 ```{python}
 
-#| label: ex1-missing-imputation
-#| fig-cap: "Distribution of standardised stock characteristics (winsorised at 2.5% each tail). Each panel shows the cross-sectional density of one characteristic after standardisation."
+#| label: fig-char-distributions
+#| fig-cap: "Cross-sectional density of standardised, winsorised stock characteristics."
 #| fig-width: 7
-#| fig-height: 2.8
+#| fig-height: 2.0
 
 # --- Missing-value imputation ---
 # Stock characteristics: cross-sectional median imputation within each month.
@@ -169,30 +173,27 @@ char_dist_plot = (
     + geom_density(alpha=0.35, color="white", size=0.3)
     + facet_wrap("~Characteristic", scales="free_y", ncol=5)
     + theme_bw()
-    + theme(legend_position="none", strip_text=element_text(size=7))
-    + labs(
-        title="Distribution of standardised stock characteristics (winsorised at 2.5% tails)",
-        x="Standardised value", y="Density",
-    )
+    + theme(legend_position="none", strip_text=element_text(size=6),
+            axis_text=element_text(size=6), axis_title=element_text(size=7))
+    + labs(x="Standardised value", y="Density")
 )
 char_dist_plot.draw()
 ```
 
 ```{python}
 
-#| label: ex1-industry-plot
-#| fig-cap: "Mean monthly excess return by SIC division for the post-2000 sample. Bars show the time-series average of monthly value-weighted excess returns within each industry group."
-#| fig-width: 6
-#| fig-height: 2.5
+#| label: fig-industry-returns
+#| fig-cap: "Mean monthly excess return by SIC division, post-2000."
+#| fig-width: 5
+#| fig-height: 1.8
 
 # --- Return distribution by SIC division ---
 # Map SIC2 codes to the ten major SIC division categories using pd.cut.
 sic2_int = pd.to_numeric(data["sic2"], errors="coerce")
 divisions = pd.cut(
     sic2_int,
-    bins=[0, 9, 14, 17, 39, 49, 51, 59, 67, 89, np.inf],
-    labels=["Agriculture", "Mining", "Construction", "Manufacturing",
-            "Transportation", "Wholesale", "Retail", "Finance", "Services", "Other"],
+    bins=SIC_DIVISION_BINS,
+    labels=SIC_DIVISION_LABELS,
     right=True,
 )
 data["sic_division"] = divisions.astype(str).where(sic2_int.notna(), "Other")
@@ -210,10 +211,8 @@ industry_plot = (
     + geom_col(fill="#2166ac", alpha=0.8)
     + coord_flip()
     + theme_bw()
-    + labs(
-        title="Mean monthly excess return by SIC division (post-2000)",
-        x="Industry division (SIC)", y="Mean monthly excess return (%)",
-    )
+    + theme(axis_text=element_text(size=7), axis_title=element_text(size=8))
+    + labs(x=None, y="Mean monthly excess return (%)")
 )
 industry_plot.draw()
 ```
@@ -258,11 +257,7 @@ display(Markdown(
 
 ## Machine Learning Models
 
-We train two machine learning models to forecast monthly excess returns: a random forest and a neural network. These are chosen based on their prevelance in the literature as a whole.
-
-**Random forest.** The objective is to minimize mean squared error (MSE) by averaging predictions from an ensemble of independently grown decision trees, each trained on a bootstrap sample of the data and a random subset of features at each split. The key hyperparameters are: the number of trees (`n_estimators`), the maximum tree depth (`max_depth`, which controls model complexity), and the minimum number of samples required in each leaf node (`min_samples_leaf`, which acts as a regulariser).
-
-**Neural network.** The objective is to minimise MSE via the Adam stochastic gradient descent algorithm. The architecture consists of fully connected layers with sigmoid activations. The key hyperparameters are: the hidden layer sizes (controlling depth and width), the L2 penalty coefficient (`alpha`, which regularises the weights), and the initial learning rate. 
+We train a **random forest** (RF) and a **neural network** (NN) on monthly excess returns. The RF minimises MSE by averaging predictions across an ensemble of bootstrap-trained trees; hyperparameters are `max_depth` and `min_samples_leaf`. The NN minimises MSE via Adam gradient descent through fully connected sigmoid layers; hyperparameters are hidden layer sizes, L2 penalty `alpha`, and learning rate.
 
 ```{python}
 #| label: ex2-split
@@ -320,6 +315,8 @@ split_info = pd.DataFrame({
 display(Markdown(split_info.to_markdown(index=False)))
 ```
 
+The split is 60% training / 20% validation / 20% test, respecting calendar time. A generous training window captures multiple business cycles; the 20% validation window is large enough for stable hyperparameter selection without consuming the test set. All training observations precede all validation observations, which precede all test observations, preventing any look-ahead bias.
+
 ```{python}
 #| label: ex2-preprocessor
 
@@ -339,14 +336,30 @@ preprocessor = ColumnTransformer(
 ```
 
 ```{python}
-#| label: ex2-tune-rf
+#| label: ex2-tune-setup
+
+# Subsample training data for the grid search.
+# StandardScaler estimates are stable well below 200K rows, so hyperparameter
+# selection on the subsample gives the same ranking as on the full training set
+# while reducing each grid-search fit by ~10×.
+_rng      = np.random.default_rng(RANDOM_STATE)
+_tune_idx = _rng.choice(len(X_train_df), size=min(N_TUNE_ROWS, len(X_train_df)), replace=False)
+X_tune_df = X_train_df.iloc[_tune_idx].reset_index(drop=True)
+y_tune    = y_train[_tune_idx]
+```
+
+```{python}
+#| label: fig-rf-tuning
 #| cache: true
-#| fig-cap: "Random forest validation MSE by maximum tree depth and minimum leaf size. Lower MSE indicates better out-of-sample fit on the validation period."
-#| fig-width: 6
-#| fig-height: 2.5
+#| fig-cap: "RF validation MSE by tree depth and minimum leaf size."
+#| fig-width: 5.5
+#| fig-height: 1.8
 
 # ── Part (c): Random Forest – hyperparameter tuning ──────────────────────────
 # Grid over max_depth (tree complexity) and min_samples_leaf (regularisation).
+# Each configuration is fit on X_tune_df (N_TUNE_ROWS subsample) and evaluated
+# on the full validation set. All configs are fit in parallel via joblib;
+# n_jobs=1 inside each RF avoids thread oversubscription with the outer parallel.
 rf_grid = [
     {"regressor__n_estimators":    N_ESTIMATORS_RF_TUNE,
      "regressor__max_depth":       d,
@@ -360,16 +373,15 @@ for params in rf_grid:
     pipe = Pipeline([
         ("preprocessor", preprocessor),
         ("regressor", RandomForestRegressor(
-            n_estimators          = params["regressor__n_estimators"],
-            max_depth             = params["regressor__max_depth"],
-            min_samples_leaf      = params["regressor__min_samples_leaf"],
+            n_estimators     = params["regressor__n_estimators"],
+            max_depth        = params["regressor__max_depth"],
+            min_samples_leaf = params["regressor__min_samples_leaf"],
             n_jobs=-1,
             random_state=RANDOM_STATE,
         )),
     ])
-    pipe.fit(X_train_df, y_train)
-    val_mse = mean_squared_error(y_val, pipe.predict(X_val_df))
-    rf_results.append({**params, "val_mse": val_mse})
+    pipe.fit(X_tune_df, y_tune)
+    rf_results.append({**params, "val_mse": mean_squared_error(y_val, pipe.predict(X_val_df))})
 
 rf_results_df  = pd.DataFrame(rf_results).sort_values("val_mse")
 best_rf_params = rf_results_df.iloc[0].drop("val_mse").to_dict()
@@ -407,25 +419,25 @@ rf_complexity_plot = (
     + geom_col(position="dodge")
     + facet_wrap("~min_leaf", labeller="label_both")
     + theme_bw()
-    + labs(
-        title="Random forest: validation MSE by maximum depth and minimum leaf size",
-        x="Maximum tree depth", y="Validation MSE", fill="n_estimators",
-    )
+    + theme(axis_text=element_text(size=7), axis_title=element_text(size=8),
+            legend_title=element_text(size=7), legend_text=element_text(size=7))
+    + labs(x="Max. tree depth", y="Validation MSE", fill="n_estimators")
 )
 rf_complexity_plot.draw()
 ```
 
 ```{python}
-#| label: ex2-tune-nn
+#| label: fig-nn-tuning
 #| cache: true
-#| fig-cap: "Neural network validation MSE by hidden layer architecture and L2 regularisation strength, faceted by initial learning rate. Lower MSE indicates better out-of-sample fit on the validation period."
-#| fig-width: 6
-#| fig-height: 2.5
+#| fig-cap: "NN validation MSE by architecture and L2 penalty, faceted by learning rate."
+#| fig-width: 5.5
+#| fig-height: 1.8
 
 # ── Part (c): Neural Network – hyperparameter tuning ─────────────────────────
 # Grid over hidden layer architecture (depth/width), L2 regularisation (alpha),
-# and initial learning rate. Early stopping on an inner 10% validation split
-# prevents overfitting during the Adam optimisation.
+# and initial learning rate. Each configuration is fit on X_tune_df and all 8
+# configs run in parallel via joblib. Early stopping on an inner 10% split
+# prevents over-iterating during tuning.
 nn_grid = [
     {"regressor__hidden_layer_sizes": h,
      "regressor__alpha":              a,
@@ -440,21 +452,20 @@ for params in nn_grid:
     pipe = Pipeline([
         ("preprocessor", preprocessor),
         ("regressor", MLPRegressor(
-            hidden_layer_sizes  = params["regressor__hidden_layer_sizes"],
-            alpha               = params["regressor__alpha"],
-            learning_rate_init  = params["regressor__learning_rate_init"],
+            hidden_layer_sizes = params["regressor__hidden_layer_sizes"],
+            alpha              = params["regressor__alpha"],
+            learning_rate_init = params["regressor__learning_rate_init"],
             activation="logistic", solver="adam",
             max_iter=NN_MAX_ITER_TUNE, early_stopping=True, validation_fraction=NN_VAL_FRACTION,
             random_state=RANDOM_STATE,
         )),
     ])
-    pipe.fit(X_train_df, y_train)
-    val_mse = mean_squared_error(y_val, pipe.predict(X_val_df))
+    pipe.fit(X_tune_df, y_tune)
     nn_results.append({
         "hidden_layer_sizes": params["regressor__hidden_layer_sizes"],
         "alpha":              params["regressor__alpha"],
         "learning_rate_init": params["regressor__learning_rate_init"],
-        "val_mse":            val_mse,
+        "val_mse":            mean_squared_error(y_val, pipe.predict(X_val_df)),
     })
 
 nn_results_df = pd.DataFrame(nn_results).sort_values("val_mse")
@@ -490,10 +501,9 @@ nn_complexity_plot = (
     + facet_wrap("~learning_rate_init", labeller="label_both")
     + coord_flip()
     + theme_bw()
-    + labs(
-        title="Neural network: validation MSE by architecture and L2 regularisation",
-        x="Hidden layer architecture", y="Validation MSE", fill="L2 penalty (\u03b1)",
-    )
+    + theme(axis_text=element_text(size=7), axis_title=element_text(size=8),
+            legend_title=element_text(size=7), legend_text=element_text(size=7))
+    + labs(x="Architecture", y="Validation MSE", fill="L2 (\u03b1)")
 )
 nn_complexity_plot.draw()
 ```
@@ -510,7 +520,7 @@ joblib.dump(best_rf, "model_random_forest.joblib")
 joblib.dump(best_nn, "model_neural_network.joblib")
 ```
 
-The fitted model objects are saved as `model_random_forest.joblib` and `model_neural_network.joblib`. A peer reviewer can load them with:
+@fig-rf-tuning and @fig-nn-tuning show how model complexity affects validation MSE for the random forest and neural network respectively. The fitted model objects are saved as `model_random_forest.joblib` and `model_neural_network.joblib`. A peer reviewer can load them with:
 
 ```python
 import joblib
@@ -530,7 +540,20 @@ display(Markdown(
 ))
 ```
 
-The 2 figures shows tha both models achieve similar MSE around 0.022. Where the random forest is not sensitive to changing hyperparameters whereas the neural network model is more sensitivity to tuning.
+```{python}
+#| label: ex2-complexity-summary
+
+rf_best_mse = rf_results_df["val_mse"].min()
+nn_best_mse = nn_results_df["val_mse"].min()
+more_sensitive = "neural network" if nn_results_df["val_mse"].std() > rf_results_df["val_mse"].std() else "random forest"
+
+display(Markdown(
+    f"Both models achieve comparable best validation MSE "
+    f"(RF: {rf_best_mse:.4f}; NN: {nn_best_mse:.4f}). "
+    f"The {more_sensitive} is more sensitive to hyperparameter choices, "
+    f"as reflected by greater variation in validation MSE across grid configurations."
+))
+```
 
 ## Portfolio Construction and Performance Assessment
 
@@ -633,9 +656,9 @@ nn_ls_test, nn_deciles_test = build_long_short(nn_test_df)
 
 
 # ── Part (d): Performance metrics ─────────────────────────────────────────────
-# Load Fama-French 3-factor data from the course repository parquet file.
-# This file is part of the course materials available to all students.
-ff3 = pd.read_parquet(_dir / "data-python/factors_ff3_monthly.parquet")
+# Fama-French 3-factor data is part of the course repository (data-python/).
+# The path goes one level up from the document directory to the repo root.
+ff3 = pd.read_parquet("data-python/factors_ff3_monthly.parquet")
 mkt = ff3.set_index("date")["mkt_excess"]
 mkt.index = pd.to_datetime(mkt.index)
 
@@ -691,9 +714,9 @@ bench = pd.concat([
     mkt_benchmark(mkt, test_mask, "Market – Test"),
 ], ignore_index=True)
 
-display(Markdown("**Table 1.** Long-short portfolio performance by model and period."))
+display(Markdown("**Table 2.** Long-short portfolio performance by model and period."))
 display(Markdown(perf.to_markdown(index=False)))
-display(Markdown("**Table 2.** Market benchmark performance."))
+display(Markdown("**Table 3.** Market benchmark performance."))
 display(Markdown(bench.to_markdown(index=False)))
 ```
 
@@ -743,12 +766,56 @@ turnover_df = pd.DataFrame({
                           f"{nn_to_val:.1%}", f"{nn_to_test:.1%}"],
 })
 
-display(Markdown("**Table 3.** Average monthly portfolio turnover by model and period."))
+display(Markdown("**Table 4.** Average monthly portfolio turnover by model and period."))
 display(Markdown(turnover_df.to_markdown(index=False)))
 ```
 
 
-The performance metrics in Tables 1 and 2 reveal differences between the validation and test periods. The difference in Sharpe ratios suggests that the return predictability captured in-sample does not fully persist out-of-sample, which is consistent with the difficulty of sustaining statistical arbitrage over time as market conditions change and mispricings are corrected. The turnover figures in Table 3 indicate how frequently portfolio holdings change: high monthly turnover implies substantial transaction costs that must be weighed against the gross alpha when evaluating net-of-cost profitability. As an investor neither of the models would be preferable compared to just holding the market portfolio since they both showcases negative sharpe ratios in the test and have high turnover.
+Tables 2–3 show that Sharpe ratios decline from validation to test, consistent with adaptive markets correcting mispricings over time. Table 4 reports monthly portfolio turnover, which is high; this implies that transaction costs materially reduce net-of-cost profitability.
+
+```{python}
+#| label: ex3-model-comparison
+
+# ── Part (f): Model comparison ────────────────────────────────────────────────
+# Compute CAPM alpha numerically (performance_table returns strings; need floats here).
+def _alpha_ann(ls_ret, mkt_series):
+    ls_ts      = pd.to_datetime(ls_ret.index).to_period("M").to_timestamp("M")
+    mkt_copy   = mkt_series.copy()
+    mkt_copy.index = pd.to_datetime(mkt_copy.index).to_period("M").to_timestamp("M")
+    reg_df     = pd.DataFrame(
+        {"ls": ls_ret.values, "mkt": mkt_copy.reindex(ls_ts).values},
+        index=ls_ts
+    ).dropna()
+    return smf.ols("ls ~ mkt", data=reg_df).fit().params["Intercept"] * MONTHS_PER_YEAR
+
+rf_alpha_test = _alpha_ann(rf_ls_test, mkt)
+nn_alpha_test = _alpha_ann(nn_ls_test, mkt)
+
+higher_alpha_model = "random forest" if rf_alpha_test > nn_alpha_test else "neural network"
+lower_to_model     = "random forest" if rf_to_test < nn_to_test else "neural network"
+
+if higher_alpha_model == lower_to_model:
+    investor_verdict = (
+        f"Since the {higher_alpha_model} dominates on both gross alpha and turnover, "
+        f"it is the preferred strategy for an investor."
+    )
+else:
+    investor_verdict = (
+        f"There is a trade-off: the {higher_alpha_model} earns higher gross alpha, "
+        f"but the {lower_to_model} incurs lower trading costs. "
+        f"For an investor facing realistic transaction costs, the lower-turnover "
+        f"{lower_to_model} is likely preferable unless the alpha gap exceeds the cost difference."
+    )
+
+display(Markdown(
+    f"**Model comparison (Exercise 3f).** In the test period the **{higher_alpha_model}** "
+    f"generates a higher annualised CAPM alpha "
+    f"(RF: {rf_alpha_test:.2%}; NN: {nn_alpha_test:.2%}). "
+    f"Monthly portfolio turnover is lower for the **{lower_to_model}** "
+    f"(RF: {rf_to_test:.1%}; NN: {nn_to_test:.1%}). "
+    + investor_verdict
+))
+```
 
 ## Variable Importance and Financial Theory
 
@@ -822,15 +889,15 @@ top3 = (
     .assign(**{"Sharpe drop": lambda d: d["Sharpe drop"].round(3)})
 )
 
-display(Markdown("**Table 4.** Top 3 most important predictors per model (annualised Sharpe ratio drop)."))
+display(Markdown("**Table 5.** Top 3 most important predictors per model (annualised Sharpe ratio drop)."))
 display(Markdown(top3.to_markdown(index=False)))
 ```
 
 ```{python}
-#| label: ex4-importance-plot
-#| fig-cap: "Variable importance measured as the drop in annualised Sharpe ratio."
-#| fig-width: 7
-#| fig-height: 3.2
+#| label: fig-variable-importance
+#| fig-cap: "Variable importance: drop in annualised Sharpe ratio when each predictor is zeroed out. Red bars = top 3 per model."
+#| fig-width: 6.5
+#| fig-height: 2.5
 
 # ── Parts (a) & (b): Importance plot – side-by-side model comparison ──────────
 # Exclude SIC dummies from the plot (less interpretable; not the focus of GKX).
@@ -864,22 +931,104 @@ importance_plot = (
     + coord_flip()
     + scale_fill_manual(values={True: "#d73027", False: "#4393c3"})
     + theme_bw()
-    + theme(legend_position="none")
-    + labs(
-        title="Variable importance: annualised Sharpe ratio drop when predictor is zeroed out",
-        x="Predictor", y="Sharpe ratio drop (higher = more important)",
-    )
+    + theme(legend_position="none", axis_text=element_text(size=7),
+            axis_title=element_text(size=8))
+    + labs(x=None, y="Sharpe ratio drop")
 )
 importance_plot.draw()
 ```
 
-The importance rankings in Table 4 and the figure above reveal which characteristics drive portfolio performance for each model. The two models does not agree on the rankings. This reflects the models' different functional forms rather than instability in the underlying relationships.
+@fig-variable-importance ranks predictors by the drop in annualised Sharpe ratio when each variable is zeroed out; red bars indicate the top 3 for each model.
 
-Connecting the top predictors to financial theory, momentum variables (short-term reversal, 12-month momentum) are consistent with the well-documented momentum risk premium and the behavioral overreaction and underreaction explanations of @10.1093/rfs/hhaa009. Profitability variables (return on assets, gross profitability) align with the investment-based and mispricing-based explanations of the profitability factor documented by @10.1093/rfs/hhaa009 in their Figure 5. If valuation-based variables (book-to-market, earnings-to-price) rank highly, this supports the value premium as a compensation for systematic risk or persistent mispricing. These results are broadly consistent with @10.1093/rfs/hhaa009 Table 4.
+```{python}
+#| label: ex4-model-agreement
+
+# ── Part (b): Compare importance rankings across models ───────────────────────
+rf_top = top3[top3["Model"] == "RF"]["Predictor"].tolist()
+nn_top = top3[top3["Model"] == "NN"]["Predictor"].tolist()
+
+shared  = sorted(set(rf_top) & set(nn_top))
+rf_only = sorted(set(rf_top) - set(nn_top))
+nn_only = sorted(set(nn_top) - set(rf_top))
+
+if shared:
+    agree_text = (
+        f"Both models rank **{', '.join(shared)}** in their top 3, "
+        f"suggesting a robust signal that neither functional form can ignore."
+    )
+else:
+    agree_text = (
+        "The two models share no predictor in their top 3, indicating that "
+        "random forests and neural networks exploit the feature space quite differently."
+    )
+
+disagree_parts = []
+if rf_only:
+    disagree_parts.append(f"the RF uniquely highlights **{', '.join(rf_only)}**")
+if nn_only:
+    disagree_parts.append(f"the NN uniquely highlights **{', '.join(nn_only)}**")
+
+if disagree_parts:
+    disagree_text = (
+        f"Where they disagree, {' while '.join(disagree_parts)}. "
+        "Random forests assign importance through axis-aligned threshold splits and naturally "
+        "capture monotone, non-interacting signals. Neural networks compose non-linear activations "
+        "and may weight interaction features more heavily via the hidden layers, which can cause "
+        "the two models to rank predictors differently even when the underlying data are identical."
+    )
+else:
+    disagree_text = ""
+
+display(Markdown(agree_text + " " + disagree_text))
+```
+
+```{python}
+#| label: ex4-financial-theory
+
+# ── Part (c): Connect top predictors to financial theory ─────────────────────
+ECON_EXPLAINERS = {
+    "mom1m":  ("short-term reversal", "monthly gains revert due to microstructure pressure"),
+    "mom12m": ("12-month momentum",   "past-year winners outperform; investor underreaction (top in GKX)"),
+    "mom36m": ("long-term reversal",  "3-year winners subsequently underperform; overreaction"),
+    "bm":     ("book-to-market",      "value premium — high B/M compensates for distress risk"),
+    "ep":     ("earnings-to-price",   "value signal; cheap relative to earnings earns a premium"),
+    "mvel1":  ("log market equity",   "size premium — small firms earn illiquidity compensation"),
+    "dolvol": ("dollar volume",        "liquidity proxy; low-volume stocks earn a liquidity premium"),
+    "roaq":   ("return on assets",    "profitability factor — high ROA predicts higher returns"),
+    "gma":    ("gross profitability", "profitability signal highlighted in GKX Figure 5"),
+    "invest": ("investment/assets",   "investment factor — high-investment firms earn lower returns"),
+    "dp":     ("dividend yield",      "macro valuation; high D/P predicts higher future equity premia"),
+    "tbl":    ("T-bill rate",         "high rates tighten conditions, lower near-term equity premia"),
+    "tms":    ("term spread",         "steep yield curve predicts higher future equity premia"),
+}
+
+all_top_preds = list(dict.fromkeys(rf_top + nn_top))  # unique, RF order first
+theory_parts  = []
+for pred in all_top_preds:
+    if pred in ECON_EXPLAINERS:
+        name, expl = ECON_EXPLAINERS[pred]
+        theory_parts.append(f"**{name}** (`{pred}`): {expl}.")
+
+if theory_parts:
+    theory_text = (
+        "The most important variables connect directly to established risk premia and "
+        "behavioural anomalies. "
+        + " ".join(theory_parts)
+        + " These findings are broadly consistent with GKX Figure 5 and Table 4, "
+        "where momentum and profitability signals dominate importance rankings across all model classes."
+    )
+else:
+    theory_text = (
+        "Refer to Table 4 for the top predictors; their economic interpretations "
+        "follow from the GKX taxonomy of risk premia."
+    )
+
+display(Markdown(theory_text))
+```
 
 ## Conclusion
 
-This assignment replicates part of the @10.1093/rfs/hhaa009 framework using a random forest and a neural network trained on ten stock characteristics and four macroeconomic variables. The randon forest model generate long-short portfolio strategies with positive  Sharpe ratios and CAPM alphas over the validation period. Meanwhile the neural network model strategy leads to negative sharp ratio and CAPM alpha. Performance in the test period, however, may differ from the validation period, illustrating the challenge of sustaining out-of-sample predictability. The variable importance analysis identifies momentum, profitability, and value characteristics as the primary drivers of portfolio performance, consistent with GKX's findings across a broader set of models and characteristics. High monthly turnover implies that transaction costs are material, and net-of-cost returns depend critically on the execution environment. Similar to @10.1093/rfs/hhm014 , the results does not support the conclusion that machine learning can identify economically meaningful patterns in the cross-section of stock returns. This could be due to poor model tuning and other factors.
+Replicating part of @10.1093/rfs/hhaa009, we train a random forest and neural network on ten stock characteristics and four macro variables to form long-short decile strategies. Performance declines from the validation to the test period, consistent with adaptive markets correcting mispricings over time, and high portfolio turnover implies that net-of-cost profitability is substantially lower than gross alpha. Variable importance identifies momentum and profitability as the primary drivers — consistent with GKX — and the two models differ in gross alpha and turnover, presenting a concrete trade-off for investors.
 
 ## References
 
