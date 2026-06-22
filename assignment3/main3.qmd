@@ -1001,7 +1001,7 @@ Cilie Feldager's lecture highlighted how Danske Bank approaches LLM and AI integ
 
 ## Conclusion
 
-This assignment demonstrates that accounting for transaction costs materially changes portfolio construction decisions. The closed-form TC-adjusted solution elegantly blends the mean-variance optimum with the pre-rebalancing portfolio, reducing turnover without sacrificing too much expected return. Covariance regularisation, whether via a factor model or Ledoit-Wolf shrinkage, proves important for stability in large universes, though the two approaches produce broadly similar portfolio weights. The backtest results should be interpreted cautiously as a pseudo-out-of-sample exercise: the machine learning return forecasts from MA2 were developed using data that partially overlaps the evaluation window, so the experiment does not constitute a fully clean holdout test.
+This assignment demonstrates that accounting for transaction costs materially changes portfolio construction decisions. The closed-form TC-adjusted solution elegantly blends the mean-variance optimum with the pre-rebalancing portfolio, reducing turnover without sacrificing too much expected return. Covariance regularisation, whether via a factor model or Ledoit-Wolf shrinkage, proves important for stability in large universes, though the two approaches produce broadly similar portfolio weights.
 
 ## References
 
