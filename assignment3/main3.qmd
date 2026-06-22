@@ -995,7 +995,7 @@ display(Markdown(
 
 The short-sale constrained portfolio implicitly regularises $\hat\Sigma^{LW}$ further, as shown by @jagannathan2003: imposing non-negativity constraints is equivalent to shrinking negative off-diagonal covariance elements to zero. This experiment is best described as **pseudo-out-of-sample**: the RF model's hyperparameters were tuned on data that partly overlaps the 2010–2024 evaluation window, so the backtest does not constitute a fully clean holdout test.
 
-## 6. Guest Lecture Reflection
+## 6. Guest Lecture
 
 Cilie Feldager's lecture highlighted how Danske Bank approaches LLM and AI integration with a strong emphasis on building secure, scalable systems, particularly the role of principled model evaluations in validating that deployed systems behave reliably under real-world conditions. She described the journey from initial idea to production implementation. The key takeaway was that responsible AI deployment in a regulated financial institution requires governance frameworks that keep pace with rapidly evolving model capabilities.
 
