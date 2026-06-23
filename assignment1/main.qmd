@@ -24,7 +24,7 @@ format:
 ---
 
 
-In this assignment we study estimation error in mean-variance portfolio optimization, replicating the main findings of @987c7289-8939-3a32-96f2-3d9b692dffee and @BRANDT2010269. We calibrate a single-factor model from S\&P 500 data, construct a synthetic universe of 50 assets with known true parameters, and use Monte Carlo simulation to evaluate the out-of-sample performance of several portfolio strategies.
+In this assignment we study estimation error in mean-variance portfolio optimization, replicating the main findings of @jobson1980 and @BRANDT2010269. We calibrate a single-factor model from S\&P 500 data, construct a synthetic universe of 50 assets with known true parameters, and use Monte Carlo simulation to evaluate the out-of-sample performance of several portfolio strategies.
 
 ```{python}
 #| label: setup
@@ -53,18 +53,12 @@ $$
 $$
 
 
-## Synthetic Asset Universe
-We construct a universe of $N = 50$ synthetic assets following the single-factor model:
+## S&P 500 and Market Parameters
+We download monthly returns for the S&P 500 index (^GSPC) and the 13-week Treasury Bill rate (^IRX) from Yahoo!Finance for the period January 2000 to February 2026. The figures below show the raw price and yield series.
 
-$$
-r_{i,t} = \alpha_i + \beta_i r_{m,t} + \epsilon_{i,t}
-$$
-
-where $r_{m,t}$ is the market return, $\alpha_i$ and $\beta_i$ are the intercept and factor loading for asset $i$, and $\epsilon_{i,t}$ is the idiosyncratic shock.
-
-```{python} 
+```{python}
 #| cache: true
-#| label: figures for period
+#| label: download-data
 
 # Define the sample period for the entire analysis
 start_date = "2000-01-01"
@@ -85,36 +79,36 @@ tbill = tf.download_data(
     start_date=start_date,
     end_date=end_date,
 )
+```
 
-# Visualize S&P 500 price level over the sample period
-sp500_figure = (
-    ggplot(sp500, aes(y="adjusted_close", x="date"))
+```{python}
+#| label: fig-sp500-prices
+#| fig-cap: "S&P 500 index price level from January 2000 to February 2026."
+
+(ggplot(sp500, aes(x="date", y="adjusted_close"))
     + geom_line()
-    + labs(x="", y="", title="S&P 500 stock prices (in USD) 2000-2026")
-)
-sp500_figure.show()
+    + labs(x="Date", y="Price (USD)", title="S&P 500 index 2000–2026")
+    + theme_bw()
+).draw()
+```
 
-# Visualize Treasury Bill rate over the sample period
-tbill_figure = (
-    ggplot(tbill, aes(y="adjusted_close", x="date"))
+```{python}
+#| label: fig-tbill-rate
+#| fig-cap: "13-week Treasury Bill annualized yield from January 2000 to February 2026."
+
+(ggplot(tbill, aes(x="date", y="adjusted_close"))
     + geom_line()
-    + labs(x="", y="", title="13-week T-Bill (in USD) 2000-2026")
-)
-tbill_figure.show()
+    + labs(x="Date", y="Annualized yield (%)", title="13-week T-Bill rate 2000–2026")
+    + theme_bw()
+).draw()
+```
 
-
+```{python}
 #| cache: true
-#| label: returns
+#| label: sp500-returns
 
-# Compute daily percentage returns for the S&P 500 by taking the 
-# first difference of log prices (pct_change), sorted by date
+# Compute daily percentage returns for the S&P 500 by compounding daily pct_change
 returns_sp500 = (sp500
-    .sort_values("date")
-    .assign(ret=lambda x: x["adjusted_close"].pct_change())
-    .get(["symbol", "date", "ret"]))
-
-# Compute daily percentage changes in the T-Bill rate, sorted by date
-returns_tbill = (tbill
     .sort_values("date")
     .assign(ret=lambda x: x["adjusted_close"].pct_change())
     .get(["symbol", "date", "ret"]))
@@ -124,7 +118,7 @@ returns_tbill = (tbill
 
 ```{python}
 #| cache: true
-#| label: monthly returns
+#| label: monthly-returns
 
 # Aggregate daily S&P 500 returns to monthly by compounding daily returns
 # within each month: (1+r1)(1+r2)...(1+rT) - 1
@@ -134,22 +128,16 @@ returns_monthly_sp500 = (returns_sp500
     .agg(ret=("ret", lambda x: np.prod(1 + x) - 1))
 )
 
-# Aggregate T-Bill rate to monthly by taking the last observed rate of each month
+# Aggregate T-Bill to monthly by taking the last IRX level of each month,
+# then convert the annualized yield (%) to a monthly rate: rf = (1 + IRX/100)^(1/12) - 1
 returns_monthly_tbill = (
-    returns_tbill
+    tbill
     .assign(date=lambda x: x["date"].dt.to_period("M").dt.to_timestamp())
     .groupby(["symbol", "date"], as_index=False)
-    .agg(ret=("ret", "last"))   
+    .agg(irx=("adjusted_close", "last"))
+    .assign(risk_free=lambda x: (1 + x["irx"] / 100) ** (1/12) - 1)
+    .drop(columns="irx")
 )
-
-# Convert annualized T-Bill yield (in %) to a monthly rate
-# using the formula: rf = (1 + IRX/100)^(1/12) - 1
-returns_monthly_tbill["risk_free"] = (
-    (1 + returns_monthly_tbill["ret"] / 100) ** (1/12) - 1
-)
-
-# Drop the raw annualized rate column, keeping only the monthly risk-free rate
-returns_monthly_tbill = returns_monthly_tbill.drop(columns="ret")
 
 # Merge S&P 500 and T-Bill data on date and compute monthly excess returns
 monthly_ret = (returns_monthly_tbill
@@ -186,14 +174,28 @@ sigma2_m = monthly_ret["ret_excess"].var()
 # Annualize by multiplying means by 12 and variances by 12
 annual_mean = 12 * mu_m
 annual_variance = 12 * sigma2_m
-
-print(f"Monthly mean excess return:       {mu_m:.3f}")
-print(f"Monthly variance:                 {sigma2_m:.3f}")
-print(f"Annualized mean excess return:    {annual_mean:.3f}")
-print(f"Annualized variance:              {annual_variance:.3f}")
 ```
 
-The annualized mean excess return and variance are reported above. The mean excess return is positive over the sample period, consistent with the equity risk premium.
+```{python}
+#| label: tbl-market-stats
+#| tbl-cap: "Monthly and annualized S&P 500 excess return parameters."
+#| output: asis
+from great_tables import GT
+
+stats = pd.DataFrame({
+    "Statistic": ["Mean excess return", "Variance"],
+    "Monthly": [mu_m, sigma2_m],
+    "Annualized": [annual_mean, annual_variance],
+})
+
+print(
+    GT(stats)
+    .fmt_number(columns=["Monthly", "Annualized"], decimals=4)
+    .as_latex()
+)
+```
+
+@tbl-market-stats reports the estimated parameters. The annualized mean excess return is positive over the sample period, consistent with the equity risk premium.
 
 ## Synthetic Asset Universe
 We construct a universe of $N = 50$ synthetic assets following the single-factor model:
@@ -296,7 +298,8 @@ The figure below plots the mean-variance efficient frontier constructed from the
 
 ```{python}
 #| cache: true
-#| label: efficient frontier figure
+#| label: fig-efficient-frontier
+#| fig-cap: "Mean-variance efficient frontier computed from true parameters. The red star marks the tangency portfolio (maximum Sharpe ratio), the green diamond marks the minimum variance portfolio, and grey dots are individual assets."
 
 # Collect individual asset risk/return coordinates for the scatter plot
 assets = pd.DataFrame({
@@ -345,8 +348,7 @@ plot_4 = (
     + labs(
         x="Monthly volatility (σ)",
         y="Monthly excess return (μ)",
-        title="Mean-variance efficient frontier (true parameters)",
-        caption="Red star: tangency portfolio. Green diamond: minimum variance portfolio. Grey dots: individual assets."
+        title="Mean-variance efficient frontier (true parameters)"
     )
     + theme_bw()
 )
@@ -359,7 +361,8 @@ We now show how estimation error distorts the shape of the efficient frontier. F
 
 ```{python}
 #| cache: true
-#| label: estimated frontier figure vs true frontier
+#| label: fig-estimated-frontier
+#| fig-cap: "Plug-in efficient frontiers (light blue) evaluated at the true parameters versus the true frontier (dark blue), across 25 simulations for each sample size $T \\in \\{60, 120, 240, 1200\\}$."
 
 # Simulate T observations from the true multivariate normal distribution
 def simulate_returns(periods, expected_returns, covariance_matrix):
@@ -420,8 +423,7 @@ plot_5 = (
     + labs(
         x="Monthly volatility (σ)",
         y="Monthly excess return (μ)",
-        title="Estimated vs true efficient frontier",
-        caption="Light blue: plug-in frontiers. Dark blue: true frontier."
+        title="Estimated vs true efficient frontier"
     )
     + theme_bw()
 )
@@ -435,7 +437,8 @@ As $T$ increases, the plug-in frontiers converge toward the true frontier, thoug
 We evaluate the out-of-sample Sharpe ratio of the plug-in tangency portfolio across 500 simulations for each $T$. Weights are computed from estimated parameters but performance is measured using the true $\mu$ and $\Sigma$, isolating the cost of estimation error. The Sharpe ratio is used as the performance criterion, as it captures the trade-off between return and risk on a scale comparable across strategies.
 ```{python}
 #| cache: true
-#| label: out of sample sharpe ratio of plug in
+#| label: fig-oos-sharpe-plugin
+#| fig-cap: "Distribution of out-of-sample Sharpe ratios for the plug-in tangency portfolio across 500 simulations. Dashed blue: true tangency Sharpe ratio. Dashed red: zero."
 
 def evaluate_tangency(T, mu, Sigma):
     # Draw a synthetic sample of length T from the true DGP
@@ -479,8 +482,7 @@ plot_6 = (
     + labs(
         x="Out-of-sample Sharpe ratio",
         y="Count",
-        title="Out-of-sample Sharpe ratio of plug-in tangency portfolio",
-        caption="Dashed blue: true tangency Sharpe. Dashed red: zero."
+        title="Plug-in tangency: out-of-sample Sharpe ratio"
     )
     + theme_bw()
 )
@@ -499,7 +501,8 @@ We compare four strategies against the equal-weight benchmark ($\omega_{ew} = \f
 - **Ledoit-Wolf shrinkage tangency**: replaces $\hat{\Sigma}$ with the Ledoit-Wolf shrinkage estimator, which pulls extreme sample eigenvalues toward a structured target. This stabilizes the covariance inverse that drives portfolio weights, directly attacking the source of estimation error in $\Sigma$.
 ```{python}
 #| cache: true
-#| label: out of sample sharpe ratios across strategies
+#| label: fig-oos-sharpe-strategies
+#| fig-cap: "Out-of-sample Sharpe ratios across portfolio strategies for $T \\in \\{60, 120, 240, 1200\\}$, based on 500 simulations each. Dashed blue: true tangency Sharpe ratio."
 
 def compute_portfolio_weights(mu_hat, Sigma_hat, sim, N):
     iota = np.ones(N)
@@ -581,8 +584,7 @@ plot_7 = (
     + labs(
         x="Strategy",
         y="Out-of-sample Sharpe ratio",
-        title="Out-of-sample Sharpe ratios across strategies",
-        caption="Dashed blue: true tangency Sharpe."
+        title="Out-of-sample Sharpe ratios across strategies"
     )
     + theme_bw()
     + theme(axis_text_x=element_text(angle=45, ha="right"), legend_position="none")
@@ -591,7 +593,7 @@ plot_7 = (
 plot_7
 ```
 
-The figure shows that the equal-weight portfolio achieves the highest and most stable Sharpe ratio across all sample sizes, confirming that naive diversification is difficult to beat out-of-sample, a result consistent with @987c7289-8939-3a32-96f2-3d9b692dffee. The Ledoit-Wolf shrinkage tangency portfolio outperforms the unconstrained plug-in tangency at small $T$, demonstrating that regularizing the covariance estimate directly reduces the most damaging source of estimation error. The short-sell constrained tangency performs similarly to Ledoit-Wolf at small $T$ but converges more slowly to the true optimum as $T$ grows, because the constraint remains binding even with accurate estimates. The minimum variance portfolio is competitive when $T$ is small, benefiting from avoiding noisy mean estimates entirely. Notably, none of the strategies reach the true tangency Sharpe ratio (dashed blue line), highlighting the persistent cost of estimation uncertainty regardless of the approach taken.
+The figure shows that the equal-weight portfolio achieves the highest and most stable Sharpe ratio across all sample sizes, confirming that naive diversification is difficult to beat out-of-sample, a result consistent with @jobson1980. The Ledoit-Wolf shrinkage tangency portfolio outperforms the unconstrained plug-in tangency at small $T$, demonstrating that regularizing the covariance estimate directly reduces the most damaging source of estimation error. The short-sell constrained tangency performs similarly to Ledoit-Wolf at small $T$ but converges more slowly to the true optimum as $T$ grows, because the constraint remains binding even with accurate estimates. The minimum variance portfolio is competitive when $T$ is small, benefiting from avoiding noisy mean estimates entirely. Notably, none of the strategies reach the true tangency Sharpe ratio (dashed blue line), highlighting the persistent cost of estimation uncertainty regardless of the approach taken.
 
 The key practical lesson is that investors should prefer strategies that reduce estimation error directly, either by avoiding the noisiest inputs (equal weight, minimum variance), regularizing estimates (Ledoit-Wolf), or constraining the solution space (short-sell constraint) — rather than relying on unconstrained plug-in optimization with limited data.
 
