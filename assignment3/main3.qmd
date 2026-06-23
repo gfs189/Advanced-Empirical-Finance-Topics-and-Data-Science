@@ -22,6 +22,9 @@ format:
     lang: en
     fontsize: 12pt
     highlight-style: github-light
+    include-in-header:
+      text: |
+        \usepackage{float}
 ---
 
 ```{python}
@@ -37,18 +40,19 @@ import warnings
 import joblib                          # for loading the saved MA2 model object
 from IPython.display import display, Markdown
 from itertools import product          # used to build characteristic × macro interaction names
-from scipy.stats import expon
 from scipy.optimize import minimize    # fallback solver for the constrained MV problem
 
 # Finance data download and plotting
 import tidyfinance as tf
-from plotnine import *
-from mizani.formatters import percent_format
+from plotnine import (
+    ggplot, aes,
+    geom_line, geom_point, geom_abline,
+    theme_bw, theme, element_blank,
+    labs,
+)
 
-# Covariance estimation and preprocessing
+# Covariance estimation
 from sklearn.covariance import LedoitWolf
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import StandardScaler
 
 # Quadratic programming solvers for the long-only portfolio (Exercise 5d)
 import quadprog
@@ -61,9 +65,9 @@ except ImportError:
 warnings.filterwarnings("ignore")
 
 # File paths — relative to this script so peer reviewers can run without editing paths
-_dir         = Path(".")
-PARQUET_PATH = Path("../assignment2/stock_characteristics_monthly.parquet")  # MA2 data
 MODEL_DIR    = Path(".")   # model_random_forest.joblib lives alongside this script
+DATA_FILE    = Path("./stock_characteristics_monthly.parquet")
+CRSP_FILE    = Path("./crsp_monthly.parquet")
 
 # ── Global constants — centralised here so changing one value propagates everywhere ──
 GAMMA           = 4       # Risk aversion (fixed throughout per assignment)
@@ -94,7 +98,6 @@ SIC_LABELS = [
 # Alphabetical order is what pandas uses for get_dummies; drop_first removes Agriculture
 SIC_CATS_SORTED = sorted(SIC_LABELS)
 
-
 # ── Helper: SIC division from SIC2 code ──────────────────────────────────────
 def sic2_to_division(sic2_series):
     s = pd.to_numeric(sic2_series, errors="coerce")
@@ -115,7 +118,7 @@ IXN_COLS = [f"{c}_x_{m}" for c, m in product(CHAR_COLS, MACRO_COLS)]
 
 ## Introduction
 
-In this report we implement a transaction-cost-robust monthly portfolio backtest following @hautsch2019. We combine three components: a machine-learning expected return estimator carried over from Mandatory Assignment 2, a regularised covariance estimator, and a closed-form mean-variance optimiser that penalises deviations from the pre-rebalancing portfolio. The result is a framework that simultaneously addresses parameter uncertainty in large covariance matrices, model uncertainty in expected returns, and the drag from frequent rebalancing. The out-of-sample evaluation period spans January 2010 to December 2024, and we compare the four strategies: naive diversification(1), two variants of transaction-cost-adjusted mean-variance(2,3), and a short-sale constrained portfolio(4). We do this on annualised Sharpe ratio, mean excess return, and average monthly turnover.
+In this report we implement a transaction-cost-robust monthly portfolio backtest following @hautsch2019. We combine three components: a machine-learning expected return estimator carried over from Mandatory Assignment 2, a regularised covariance estimator, and a closed-form mean-variance optimiser that penalises deviations from the pre-rebalancing portfolio. The result is a framework that simultaneously addresses parameter uncertainty in large covariance matrices, model uncertainty in expected returns, and the drag from frequent rebalancing. The out-of-sample evaluation period spans January 2010 to December 2024, and we compare four strategies: naive diversification (1), two variants of transaction-cost-adjusted mean-variance (TC-MV) (2, 3), and a short-sale constrained (SS-constrained) portfolio (4). We do this on annualised Sharpe ratio, mean excess return, and average monthly turnover.
 
 ```{python}
 #| label: data-loading
@@ -124,7 +127,7 @@ In this report we implement a transaction-cost-robust monthly portfolio backtest
 # Load the parquet file produced in MA2 — contains monthly stock characteristics,
 # macroeconomic variables, excess returns, and lagged market caps from 2000 to 2024.
 _needed_cols = ID_COLS + CHAR_COLS + MACRO_COLS
-df_raw = pd.read_parquet(PARQUET_PATH, columns=_needed_cols)
+df_raw = pd.read_parquet(DATA_FILE, columns=_needed_cols)
 # Snap all dates to month-end so date joins with other datasets align exactly.
 df_raw["date"] = pd.to_datetime(df_raw["date"]) + pd.offsets.MonthEnd(0)
 
@@ -135,18 +138,33 @@ returns_wide = (
     .pivot(index="date", columns="permno", values="ret_excess")
 )
 
-# Build the parquet-based universe by keeping only stocks above the 20th
-# market-cap percentile each month.  The price filter (> $2) is applied in
-# Exercise 1 where CRSP data with price is available.
-p20 = (
-    df_raw.groupby("date")["mktcap_lag"]
+# Build the investment universe from CRSP: NYSE p20 breakpoint + price > $2.
+# Using the same filters as Exercise 1 ensures the backtest universe is consistent
+# with the reported universe characterisation.
+crsp_full = pd.read_parquet(CRSP_FILE)
+crsp_full["date"] = pd.to_datetime(crsp_full["date"]) + pd.offsets.MonthEnd(0)
+crsp_full = crsp_full.loc[crsp_full["date"] >= "1980-01-01"]
+
+nyse_p20 = (
+    crsp_full.loc[crsp_full["exchange"] == "NYSE"]
+    .groupby("date")["mktcap"]
     .quantile(0.20)
-    .rename("mktcap_p20")
+    .rename("nyse_p20")
     .reset_index()
 )
-df_raw = df_raw.merge(p20, on="date", how="left")
-universe_pq = df_raw.loc[df_raw["mktcap_lag"] >= df_raw["mktcap_p20"],
-                          ["date","permno","mktcap_lag"]].copy()
+crsp_full = crsp_full.merge(nyse_p20, on="date", how="left")
+crsp_filtered = crsp_full.loc[
+    (crsp_full["prc"].abs() > 2) &
+    (crsp_full["mktcap"] >= crsp_full["nyse_p20"])
+].copy()
+
+# Intersect with parquet stocks: only stocks that also appear in the characteristics
+# file can receive RF predictions, so the backtest universe is the intersection.
+parquet_permnos = set(df_raw["permno"].unique())
+universe_bt = crsp_filtered.loc[
+    crsp_filtered["permno"].isin(parquet_permnos),
+    ["date", "permno", "mktcap_lag"]
+].dropna(subset=["mktcap_lag"])
 
 # Download Fama-French 3-factor returns (MKT-RF, SMB, HML) from Kenneth French's
 # website via tidyfinance — used as factors in the covariance model (Exercise 3).
@@ -163,78 +181,62 @@ factors_ff3 = factors_ff3.set_index("date")[["mkt_excess","smb","hml"]]
 rf_model = joblib.load(MODEL_DIR / "model_random_forest.joblib")
 ```
 
-## 1
+## 1. Investment Universe
+
+@fig-ex1-plot shows how the size of the investable universe evolves over the sample period.
 
 ```{python}
 #| label: ex1-universe
 #| cache: true
 
-# Download the full CRSP monthly dataset to apply the price filter and compute the NYSE 20th percentile cutoff. 
-try:
-    crsp_full = tf.download_data(
-        "wrds", dataset="crsp_monthly", start_date="1980-01-01", end_date="2024-12-31"
-    )
-    crsp_full["date"] = pd.to_datetime(crsp_full["date"]) + pd.offsets.MonthEnd(0)
-
-    # Compute the NYSE 20th size percentile each month using NYSE-listed stocks only.
-    # Using NYSE breakpoints (not all-exchange) is the standard Fama-French convention
-    # and prevents the many small AMEX/NASDAQ stocks from pulling the cutoff too low.
-    nyse_p20 = (
-        crsp_full.loc[crsp_full["exchange"] == "NYSE"]
-        .groupby("date")["mktcap"]
-        .quantile(0.20)
-        .rename("nyse_p20")
-        .reset_index()
-    )
-    crsp_full = crsp_full.merge(nyse_p20, on="date", how="left")
-
-    # Apply both filters: absolute price > $2 removes penny stocks and
-    # mktcap >= NYSE 20th percentile removes micro-caps that inflate turnover.
-    universe_ex1 = crsp_full.loc[
-        (crsp_full["prc"].abs() > 2) &
-        (crsp_full["mktcap"] >= crsp_full["nyse_p20"])
-    ].copy()
-
-    # Count how many stocks pass the filters in each month
-    n_by_month = universe_ex1.groupby("date")["permno"].count()
-    avg_N      = n_by_month.mean()
-    data_source = "CRSP (1980–2024)"
-
-except Exception as exc:
-    # Fallback: use the parquet universe (no price filter, starts 2000)
-    n_by_month  = universe_pq.groupby("date")["permno"].count()
-    avg_N       = n_by_month.mean()
-    data_source = "parquet proxy (2000–2024, no price filter)"
+# crsp_filtered is already built in data-loading with the NYSE p20 + price > $2 screen.
+# Here we just compute the monthly stock count for reporting.
+n_by_month  = crsp_filtered.groupby("date")["permno"].count()
+avg_N       = n_by_month.mean()
+data_source = "CRSP (1980–2024)"
 ```
 
 ```{python}
-#| label: ex1-plot
+#| label: fig-ex1-plot
 #| cache: false
+#| fig-width: 6
+#| fig-height: 3
+#| fig-pos: "H"
 #| fig-cap: "Monthly number of stocks passing the universe filters. The micro-cap screen (price > \\$2, mktcap > NYSE 20th percentile) removes shell companies and penny stocks that distort mean-variance analysis."
 
-# Reshape the monthly count series to a plain DataFrame for ggplot
 n_plot_df = n_by_month.reset_index()
 n_plot_df.columns = ["date", "N"]
 
-# Plot the time series of universe size to show how the investable set evolves
 (
     ggplot(n_plot_df, aes(x="date", y="N"))
     + geom_line(color="#2166ac", size=0.5)
     + theme_bw()
     + labs(title=f"Investment universe size ({data_source})",
            x="Date", y="Number of stocks")
-).draw()
+)
+```
 
-# Print the average N and a brief characterisation as inline markdown text
+```{python}
+#| label: ex1-text
+#| cache: false
+
+n_min  = int(n_by_month.min())
+n_max  = int(n_by_month.max())
+n_2010 = int(n_by_month.loc[n_by_month.index >= "2010-01-01"].mean())
 display(Markdown(
     f"The filtered universe contains on average **{avg_N:.0f} stocks** per month "
-    f"({data_source}). The decline after the dot-com peak reflects the wave of "
-    f"delistings and mergers that reduced the number of actively traded names."
+    f"({data_source}), ranging from a minimum of {n_min} to a maximum of {n_max}. "
+    f"The double screen, absolute price above \\$2 and market capitalisation above the NYSE 20th percentile, "
+    f"removes penny stocks and micro-caps that would otherwise inflate measured turnover and distort mean-variance analysis. "
+    f"Universe size peaked in the late 1990s, contracted sharply following the dot-com collapse and the "
+    f"subsequent wave of delistings and mergers, and has remained relatively stable since. "
+    f"Over the backtest evaluation window (January 2010 – December 2024) the average universe size is "
+    f"**{n_2010:.0f} stocks** per month."
 ))
 ```
 
-## 2
-We now establish the theoretical foundation for the assigment:
+## 2. Theoretical Foundation
+We now establish the theoretical foundation for the assignment:
 **Closed-form solution.** The transaction-cost-adjusted problem is
 
 $$
@@ -333,6 +335,25 @@ def compute_weights(mu, Sigma, gamma, lambda_tc, w_prev):
     )
 
 
+def clip_weights(w, lo=-0.05, hi=0.05, max_iter=50):
+    """
+    Project weights onto the box [lo, hi]^N ∩ {ι'w = 1} by iterative clipping
+    and renormalisation.  Convergence is fast in practice (< 10 iterations).
+    Bounds of ±5 % prevent any single stock from dominating the portfolio and
+    stop the unconstrained MV solver from taking extreme short positions.
+    """
+    w = w.copy()
+    for _ in range(max_iter):
+        w = np.clip(w, lo, hi)
+        s = w.sum()
+        if abs(s) < 1e-12:
+            return np.ones(len(w)) / len(w)
+        w = w / s
+        if np.all((w >= lo - 1e-9) & (w <= hi + 1e-9)):
+            break
+    return w
+
+
 def compute_constrained_weights(mu, Sigma, gamma=GAMMA):
     """
     Long-only (ω ≥ 0) mean-variance portfolio solved as a quadratic programme.
@@ -381,7 +402,7 @@ def compute_constrained_weights(mu, Sigma, gamma=GAMMA):
     return out / s if s > 1e-12 else w0
 ```
 
-## 3
+## 3. Covariance Estimation
 
 We estimate $\hat\Sigma_t$ at each month $t$ using a **Fama-French three-factor model** fitted on the 60-month rolling window ending at $t$. The factor structure decomposes the return covariance as
 
@@ -391,7 +412,7 @@ $$
 
 where $\hat B$ is the $N\times3$ matrix of OLS factor loadings, $\hat\Sigma_F$ is the $3\times3$ factor covariance, and $\hat D = \mathrm{diag}(\hat\sigma_{\varepsilon,i}^2)$ is the diagonal matrix of idiosyncratic variances. This structure ensures $\hat\Sigma_t$ is positive definite even when $N \gg T$.
 
-For $\hat\Sigma_t^{LW}$ we apply Ledoit-Wolf (2004) shrinkage to the rolling **sample covariance** of the same return window, shrinking towards a scaled identity matrix with the analytically optimal intensity. The two estimators differ in how they regularise: the factor model imposes a low-rank economic structure, while Ledoit-Wolf shrinks the sample eigenvalues toward their cross-sectional mean.
+For $\hat\Sigma_t^{LW}$ we apply Ledoit-Wolf (LW; 2004) shrinkage to the rolling **sample covariance** of the same return window, shrinking towards a scaled identity matrix with the analytically optimal intensity. The two estimators differ in how they regularise: the factor model imposes a low-rank economic structure, while LW shrinks the sample eigenvalues toward their cross-sectional mean. @fig-ex3-comparison compares the minimum-variance portfolio weights produced by each estimator at a representative month.
 
 ```{python}
 #| label: ex3-cov-functions
@@ -527,8 +548,11 @@ def min_var_weights(Sigma):
 ```
 
 ```{python}
-#| label: ex3-comparison
+#| label: fig-ex3-comparison
 #| cache: true
+#| fig-width: 4.5
+#| fig-height: 4
+#| fig-pos: "H"
 #| fig-cap: "Minimum-variance weights from the factor model ($\\hat\\Sigma$, x-axis) versus Ledoit-Wolf ($\\hat\\Sigma^{LW}$, y-axis) at December 2019. Each point is one stock; the dashed line is the 45° reference."
 
 # Use December 2019 as a representative snapshot month (mid-sample, pre-COVID)
@@ -563,7 +587,6 @@ cov_df = pd.DataFrame({"w_factor": w_fac, "w_lw": w_lw})
 corr_w = np.corrcoef(w_fac, w_lw)[0, 1]
 mae_w  = np.mean(np.abs(w_fac - w_lw))
 
-# Scatter plot: each point is one stock; diagonal line = perfect agreement
 (
     ggplot(cov_df, aes(x="w_factor", y="w_lw"))
     + geom_point(alpha=0.35, size=0.8)
@@ -571,9 +594,13 @@ mae_w  = np.mean(np.abs(w_fac - w_lw))
     + theme_bw()
     + labs(title="Min-variance weights: factor model vs. Ledoit-Wolf (Dec 2019)",
            x="Factor model weight", y="Ledoit-Wolf weight")
-).draw()
+)
+```
 
-# Print correlation and MAE as inline text below the figure
+```{python}
+#| label: ex3-text
+#| cache: false
+
 display(Markdown(
     f"The two estimators produce min-variance weights with correlation "
     f"**{corr_w:.3f}** and mean absolute difference **{mae_w*100:.2f} pp**. "
@@ -581,13 +608,13 @@ display(Markdown(
 ))
 ```
 
-## 4
+## 4. Expected Returns
 
-We use the Random Forest pipeline trained in MA2 to generate $\hat\mu_t$ for every stock-month in the backtest window. The feature engineering replicates the MA2 pipeline exactly: cross-sectional median imputation for missing stock characteristics, forward-fill for macroeconomic variables, $10 \times 4 = 40$ characteristic-macro interaction terms, and nine SIC-division dummy variables. The pipeline's internal `StandardScaler` was fitted on the MA2 training data only, so applying it here introduces no look-ahead bias in the scaling step. For the small fraction of stocks with no prediction in a given month, we substitute the cross-sectional mean $\hat\mu_t$.
+We use the Random Forest (RF) pipeline trained in Mandatory Assignment 2 (MA2) to generate $\hat\mu_t$ for every stock-month in the backtest window. The feature engineering replicates the MA2 pipeline exactly: cross-sectional median imputation for missing stock characteristics, forward-fill for macroeconomic variables, $10 \times 4 = 40$ characteristic-macro interaction terms, and nine Standard Industrial Classification (SIC) division dummy variables. The pipeline's internal `StandardScaler` was fitted on the MA2 training data only, so applying it here introduces no look-ahead bias in the scaling step. For the small fraction of stocks with no prediction in a given month, we substitute the cross-sectional mean $\hat\mu_t$.
 
 ```{python}
 #| label: ex4-predictions
-#| cache: true
+#| cache: false
 
 # Generate all monthly return forecasts μ̂_t for the backtest window in one pass.
 # Feature engineering exactly replicates the MA2 pipeline to ensure the RF model
@@ -647,23 +674,25 @@ mu_hat_all = rf_model.predict(X_all.drop(columns=["permno", "date"]))
 mu_predictions = X_all[["permno", "date"]].assign(mu_hat=mu_hat_all)
 ```
 
-## 5
+## 5. Portfolio Backtest
 
 We evaluate four strategies over portfolio-return months **January 2010 – December 2024** (portfolios formed December 2009 – November 2024). At each formation month $t$, all inputs ($\hat\Sigma_t$, $\hat\Sigma_t^{LW}$, $\hat\mu_t$) use only data available at $t$. We set $\gamma=4$ and $\lambda=0.1$.
 
+Predicted returns $\hat\mu_t$ are winsorised cross-sectionally at the 1st and 99th percentile each month. For the transaction-cost-adjusted mean-variance (TC-MV) strategy with Ledoit-Wolf covariance, an additional normalisation step is applied: $\hat\mu_t$ is standardised to a 0.1\,\% monthly cross-sectional standard deviation before solving the MV problem. This compensates for the near-isotropic structure of $\hat\Sigma^{LW}$ when $N\gg T$: with shrinkage intensity $\alpha\approx 0.9$ and mean monthly variance $\bar\sigma^2\approx 0.002$, the inverse $(\hat\Sigma^{LW})^{-1}\approx (\alpha\bar\sigma^2)^{-1}I$ amplifies expected return differences by a factor of roughly $1/(\alpha\bar\sigma^2)\approx 500$, driving extreme long/short positions and unrealistic turnover without this adjustment.
+
 Net excess returns deduct the quadratic transaction cost implied by the optimisation objective:
 $$r_t^{\mathrm{net}} = \omega_t'\,r_{t+1} - \lambda(\omega_t - \omega_t^{+})'\hat\Sigma_t(\omega_t - \omega_t^{+}).$$
-Monthly turnover follows @hautsch2019 equation 46: $\mathrm{TO}_t = \sum_i|\omega_{i,t} - \omega_{i,t}^{+}|$.
+Monthly turnover follows @hautsch2019 equation 46: $\mathrm{TO}_t = \sum_i|\omega_{i,t} - \omega_{i,t}^{+}|$. Summary statistics are reported in @tbl-ex5-table and cumulative return paths in @fig-ex5-cumplot.
 
 ```{python}
 #| label: ex5-backtest
-#| cache: true
+#| cache: false
 
 # ── Pre-computed lookups ───────────────────────────────────────────────────────
 # Universe capped to top MAX_N_STOCKS by lagged market cap: reduces N from
 # ~1000 to 300, cutting O(N³) linear-algebra cost by 37× before Woodbury.
 univ_mktcap_dict = (
-    universe_pq
+    universe_bt
     .sort_values("mktcap_lag", ascending=False)
     .groupby("date")
     .head(MAX_N_STOCKS)
@@ -756,6 +785,17 @@ for idx, t in enumerate(formation_dates):
     mu_series    = mu_dict.get(t, pd.Series(dtype=float))
     mu_reindexed = mu_series.reindex(permnos_t)
     mu_t         = mu_reindexed.fillna(mu_reindexed.mean()).values
+    # Winsorise at the 1st/99th percentile to prevent outlier forecasts from
+    # driving extreme portfolio weights and unrealistic turnover.
+    mu_t = np.clip(mu_t, np.percentile(mu_t, 1), np.percentile(mu_t, 99))
+
+    # For the LW MV problem Σ_LW ≈ (alpha/mean_var)·I when N>>T, which amplifies
+    # expected returns by ~1/mean_var (~500×).  We normalise mu to a 0.1 % monthly
+    # cross-sectional std before the LW solve so that active bets stay manageable;
+    # the factor-model Σ has a richer structure that constrains bets naturally.
+    mu_lw = mu_t - mu_t.mean()
+    _std  = mu_lw.std()
+    mu_lw = (mu_lw / _std * 1e-3 + mu_t.mean()) if _std > 1e-10 else mu_t.copy()
 
     # ── 6. Pre-rebalancing weights ────────────────────────────────────────────
     if pos > 0 and rw_di[pos - 1] == t:
@@ -784,8 +824,11 @@ for idx, t in enumerate(formation_dates):
         w_tc_mv = w_naive.copy()
 
     # LW Σ: one Woodbury solve (60×60 core) → prefactors for TC-MV-LW
+    # Uses mu_lw (normalised to 0.1% cross-sectional std) instead of raw mu_t
+    # to compensate for the near-isotropic LW inverse amplifying signals ~500×.
     try:
-        sol_lw          = woodbury_lw(U_t, gamma_t, V)
+        V_lw            = np.column_stack([mu_lw, iota])
+        sol_lw          = woodbury_lw(U_t, gamma_t, V_lw)
         Si_mu_lw, Si_iota_lw = sol_lw[:, 0], sol_lw[:, 1]
         w_tc_lw = compute_efficient_weight(
             Si_mu_lw, float(Si_mu_lw.sum()), Si_iota_lw, float(Si_iota_lw.sum()),
@@ -836,15 +879,13 @@ for idx, t in enumerate(formation_dates):
         "tc_mv_lw": w_tc_lw, "constrained": w_con,
     }
     prev_permnos = permnos_t
-    if (idx + 1) % 12 == 0:
-        print(f"  Completed through {t.strftime('%Y-%m')} | N={N}")
-
 bt = pd.DataFrame(results).set_index("date")
-print(f"Backtest complete: {len(bt)} monthly observations.")
 ```
 
+\newpage
+
 ```{python}
-#| label: ex5-table
+#| label: tbl-ex5-table
 #| cache: false
 #| tbl-cap: "Out-of-sample performance statistics (January 2010 – December 2024). Net excess returns subtract the quadratic TC from the optimisation objective. Sharpe ratios and mean excess returns are annualised (×12 and ×$\\sqrt{12}$ respectively)."
 
@@ -873,9 +914,14 @@ summary = pd.DataFrame(rows).set_index("Strategy")
 display(Markdown(summary.to_markdown()))
 ```
 
+
+
 ```{python}
-#| label: ex5-cumplot
+#| label: fig-ex5-cumplot
 #| cache: false
+#| fig-width: 6
+#| fig-height: 2.8
+#| fig-pos: "H"
 #| fig-cap: "Cumulative net excess return of the four strategies (January 2010 – December 2024). Starting value normalised to 1."
 
 # Compute cumulative gross return by compounding (1 + monthly net return) over time.
@@ -899,10 +945,10 @@ cum_df = (
     ggplot(cum_df, aes(x="date", y="Cumulative return", color="Strategy"))
     + geom_line(size=0.6)
     + theme_bw()
-    + theme(legend_position="bottom")
+    + theme(legend_position="top", legend_title=element_blank())
     + labs(title="Cumulative net excess return (2010–2024)",
            x="Date", y="Cumulative gross factor")
-).draw()
+)
 ```
 
 ```{python}
@@ -934,29 +980,36 @@ sr_diff   = abs(sharpes["TC-MV (factor Σ)"] - sharpes["TC-MV LW"])
 to_factor = turnovers["TC-MV (factor Σ)"]
 to_lw     = turnovers["TC-MV LW"]
 
+# Short-sale constrained vs unconstrained LW
+sr_con    = sharpes["SS-constrained MV"]
+sr_lw     = sharpes["TC-MV LW"]
+to_con    = turnovers["SS-constrained MV"]
+con_vs_lw = "higher" if sr_con > sr_lw else "lower"
+
 display(Markdown(
-    f"After transaction costs, **{best_sr}** achieves the highest annualised Sharpe ratio "
-    f"({sharpes[best_sr]:.2f}), while **{worst_sr}** produces the lowest ({sharpes[worst_sr]:.2f}). "
+    f"**{best_sr}** achieves the highest annualised Sharpe ratio ({sharpes[best_sr]:.2f}), "
+    f"while **{worst_sr}** produces the lowest ({sharpes[worst_sr]:.2f}). "
     f"The TC-adjusted strategies do {'better' if sharpes['TC-MV LW'] > sharpes['Naive (1/N)'] else 'not better'} "
-    f"than naive diversification after costs, suggesting that the return signal from the RF model "
-    f"{'adds value' if sharpes['TC-MV LW'] > sharpes['Naive (1/N)'] else 'does not add enough value to overcome estimation error'}. "
-    f"Regarding the covariance estimator, the Sharpe ratio difference between TC-MV (factor $\\hat{{\\Sigma}}$) "
-    f"({sharpes['TC-MV (factor Σ)']:.2f}) and TC-MV LW ({sharpes['TC-MV LW']:.2f}) is only "
-    f"{sr_diff:.2f}, indicating that the choice of covariance estimator has "
-    f"{'a modest' if sr_diff < 0.1 else 'a meaningful'} impact on performance; "
-    f"average monthly turnover is {to_factor:.3f} for the factor model versus {to_lw:.3f} for LW."
+    f"than naive diversification, suggesting the RF return signal "
+    f"{'adds value net of costs' if sharpes['TC-MV LW'] > sharpes['Naive (1/N)'] else 'does not overcome estimation error after costs'}. "
+    f"The Sharpe ratio difference between the two covariance estimators is {sr_diff:.2f} "
+    f"({'modest' if sr_diff < 0.1 else 'meaningful'}), with average turnover of {to_factor:.3f} "
+    f"(factor $\\hat{{\\Sigma}}$) versus {to_lw:.3f} (LW). "
+    f"The short-sale constrained portfolio achieves a Sharpe ratio of {sr_con:.2f} with turnover {to_con:.3f}, "
+    f"{'lower' if to_con < to_lw else 'higher'} than the unconstrained LW, consistent with the "
+    f"non-negativity constraint reducing large short positions."
 ))
 ```
 
 The short-sale constrained portfolio implicitly regularises $\hat\Sigma^{LW}$ further, as shown by @jagannathan2003: imposing non-negativity constraints is equivalent to shrinking negative off-diagonal covariance elements to zero. This experiment is best described as **pseudo-out-of-sample**: the RF model's hyperparameters were tuned on data that partly overlaps the 2010–2024 evaluation window, so the backtest does not constitute a fully clean holdout test.
 
-## 6
+## 6. Guest Lecture
 
-How banks and especially Danske Bank think of the use of LLMs and AIs when it comes to building systems which is secure and scalable. And how important the princible evaluations is for testing the models and systems in place. Also the process from idea to implementation and the value of relations and networks in the industry.
+Cilie Feldager's lecture highlighted how Danske Bank approaches LLM and AI integration with a strong emphasis on building secure, scalable systems, particularly the role of principled model evaluations in validating that deployed systems behave reliably under real-world conditions. She described the journey from initial idea to production implementation. The key takeaway was that responsible AI deployment in a regulated financial institution requires governance frameworks that keep pace with rapidly evolving model capabilities.
 
 ## Conclusion
 
-This assignment demonstrates that accounting for transaction costs materially changes portfolio construction decisions. The closed-form TC-adjusted solution elegantly blends the mean-variance optimum with the pre-rebalancing portfolio, reducing turnover without sacrificing too much expected return. Covariance regularisation — whether via a factor model or Ledoit-Wolf shrinkage — proves important for stability in large universes, though the two approaches produce broadly similar portfolio weights. The backtest results should be interpreted cautiously as a pseudo-out-of-sample exercise: the machine learning return forecasts from MA2 were developed using data that partially overlaps the evaluation window, so the experiment does not constitute a fully clean holdout test.
+This assignment demonstrates that accounting for transaction costs materially changes portfolio construction decisions. The closed-form TC-adjusted solution elegantly blends the mean-variance optimum with the pre-rebalancing portfolio, reducing turnover without sacrificing too much expected return. Covariance regularisation, whether via a factor model or Ledoit-Wolf shrinkage, proves important for stability in large universes, though the two approaches produce broadly similar portfolio weights.
 
 ## References
 
