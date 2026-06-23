@@ -14,7 +14,6 @@ format:
     geometry:
       - top=20mm
       - left=20mm
-      - left=20mm
       - bottom=20mm
       - right=20mm
     cite-method: natbib
@@ -40,6 +39,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_squared_error
 import joblib
+from great_tables import GT
 
 # ── Named constants ───────────────────────────────────────────────────────────
 MONTHS_PER_YEAR      = 12      # Annualisation factor for monthly returns
@@ -51,7 +51,7 @@ N_PLOT_SAMPLE        = 50_000  # Rows sampled for characteristic distribution pl
 N_ESTIMATORS_RF      = 50      # Number of trees in final random forest
 N_ESTIMATORS_RF_TUNE = 10      # Fewer trees during grid search to cut tuning time
 RANDOM_STATE         = 42      # Global random seed for reproducibility
-NN_MAX_ITER_TUNE     = 20      # Max iterations for NN during hyperparameter tuning
+NN_MAX_ITER_TUNE     = 200     # Max iterations for NN during hyperparameter tuning
 NN_MAX_ITER_FINAL    = 500     # Max iterations for final NN fit
 NN_VAL_FRACTION      = 0.1     # Inner validation fraction for NN early stopping
 N_TUNE_ROWS          = 200_000 # Max training rows used during grid search
@@ -126,9 +126,20 @@ summary = pd.DataFrame({
     "Max":     data[summ_vars].max(),
     "Miss. %": data[summ_vars].isna().mean().mul(100),
 }).round(3)
-summary.index = [c.replace("characteristic_", "").replace("macro_", "[m] ") for c in summary.index]
-display(Markdown("**Table 1.** Summary statistics for selected predictors (pre-imputation). [m] denotes macro variables."))
-display(Markdown(summary.to_markdown()))
+summary.index = [c.replace("characteristic_", "").replace("macro_", "(m) ") for c in summary.index]
+```
+
+```{python}
+#| label: tbl-summary
+#| tbl-cap: "Summary statistics for selected predictors (pre-imputation). (m) denotes macro variables."
+#| output: asis
+
+print(
+    GT(summary.reset_index().rename(columns={"index": "Variable"}))
+    .fmt_number(columns=["Mean", "SD", "Min", "Max"], decimals=3)
+    .fmt_number(columns=["Miss. %"], decimals=1)
+    .as_latex()
+)
 ```
 
 ```{python}
@@ -307,12 +318,23 @@ split_info = pd.DataFrame({
         str(meta.loc[test_mask,  "date"].max()),
     ],
     "Observations": [
-        f"{train_mask.sum():,}",
-        f"{val_mask.sum():,}",
-        f"{test_mask.sum():,}",
+        int(train_mask.sum()),
+        int(val_mask.sum()),
+        int(test_mask.sum()),
     ],
 })
-display(Markdown(split_info.to_markdown(index=False)))
+```
+
+```{python}
+#| label: tbl-split
+#| tbl-cap: "Date ranges and observation counts for training, validation, and test sets."
+#| output: asis
+
+print(
+    GT(split_info)
+    .fmt_integer(columns=["Observations"])
+    .as_latex()
+)
 ```
 
 The split is 60% training / 20% validation / 20% test, respecting calendar time. A generous training window captures multiple business cycles; the 20% validation window is large enough for stable hyperparameter selection without consuming the test set. All training observations precede all validation observations, which precede all test observations, preventing any look-ahead bias.
@@ -351,18 +373,18 @@ y_tune    = y_train[_tune_idx]
 ```{python}
 #| label: fig-rf-tuning
 #| cache: true
-#| fig-cap: "RF validation MSE by tree depth and minimum leaf size."
+#| fig-cap: "RF training and validation MSE by maximum tree depth and minimum leaf size (n\_estimators fixed at 10 during search). Red = training; blue = validation."
 #| fig-width: 5.5
 #| fig-height: 1.8
 
 # ── Part (c): Random Forest – hyperparameter tuning ──────────────────────────
 # Grid over max_depth (tree complexity) and min_samples_leaf (regularisation).
+# n_estimators is fixed at N_ESTIMATORS_RF_TUNE during search to save time;
+# the final model uses N_ESTIMATORS_RF (50) once the best spec is chosen.
 # Each configuration is fit on X_tune_df (N_TUNE_ROWS subsample) and evaluated
-# on the full validation set. All configs are fit in parallel via joblib;
-# n_jobs=1 inside each RF avoids thread oversubscription with the outer parallel.
+# on the full validation set.
 rf_grid = [
-    {"regressor__n_estimators":    N_ESTIMATORS_RF_TUNE,
-     "regressor__max_depth":       d,
+    {"regressor__max_depth":        d,
      "regressor__min_samples_leaf": l}
     for d in [10, 20]
     for l in [20, 100]
@@ -373,7 +395,7 @@ for params in rf_grid:
     pipe = Pipeline([
         ("preprocessor", preprocessor),
         ("regressor", RandomForestRegressor(
-            n_estimators     = params["regressor__n_estimators"],
+            n_estimators     = N_ESTIMATORS_RF_TUNE,
             max_depth        = params["regressor__max_depth"],
             min_samples_leaf = params["regressor__min_samples_leaf"],
             n_jobs=-1,
@@ -381,16 +403,22 @@ for params in rf_grid:
         )),
     ])
     pipe.fit(X_tune_df, y_tune)
-    rf_results.append({**params, "val_mse": mean_squared_error(y_val, pipe.predict(X_val_df))})
+    rf_results.append({
+        **params,
+        "train_mse": mean_squared_error(y_tune, pipe.predict(X_tune_df)),
+        "val_mse":   mean_squared_error(y_val,  pipe.predict(X_val_df)),
+    })
 
 rf_results_df  = pd.DataFrame(rf_results).sort_values("val_mse")
-best_rf_params = rf_results_df.iloc[0].drop("val_mse").to_dict()
+best_rf_params = rf_results_df.iloc[0].drop(["val_mse", "train_mse"]).to_dict()
 
-# Refit best RF on training + validation combined for the final test predictions
+# Refit best RF on training + validation combined for the final test predictions.
+# N_ESTIMATORS_RF (50) is used here — more trees than during grid search reduces
+# variance without changing the selected hyperparameters.
 best_rf = Pipeline([
     ("preprocessor", preprocessor),
     ("regressor", RandomForestRegressor(
-        n_estimators     = int(best_rf_params["regressor__n_estimators"]),
+        n_estimators     = N_ESTIMATORS_RF,
         max_depth        = int(best_rf_params["regressor__max_depth"])
                           if pd.notna(best_rf_params["regressor__max_depth"]) else None,
         min_samples_leaf = int(best_rf_params["regressor__min_samples_leaf"]),
@@ -403,25 +431,29 @@ best_rf.fit(
     np.concatenate([y_train, y_val]),
 )
 
-# Complexity plot: validation MSE by max_depth and min_samples_leaf
-rf_plot_df = (
+# Complexity plot: training and validation MSE by max_depth and min_samples_leaf.
+# Comparing the two splits reveals the bias-variance tradeoff: deeper trees
+# reduce training error but may increase validation error if they overfit.
+rf_plot_long = (
     rf_results_df
-    .assign(max_depth=lambda d: d["regressor__max_depth"].fillna("None").astype(str))
-    .rename(columns={
-        "regressor__n_estimators":    "n_estimators",
-        "regressor__min_samples_leaf": "min_leaf",
-    })
+    .assign(max_depth=lambda d: d["regressor__max_depth"].astype(str))
+    .rename(columns={"regressor__min_samples_leaf": "min_leaf"})
+    .melt(id_vars=["max_depth", "min_leaf"],
+          value_vars=["train_mse", "val_mse"],
+          var_name="Split", value_name="MSE")
+    .assign(Split=lambda d: d["Split"].map({"train_mse": "Training", "val_mse": "Validation"}))
 )
 
 rf_complexity_plot = (
-    ggplot(rf_plot_df,
-           aes(x="max_depth", y="val_mse", fill="factor(n_estimators)"))
-    + geom_col(position="dodge")
+    ggplot(rf_plot_long, aes(x="max_depth", y="MSE", fill="Split"))
+    + geom_col(position="dodge", alpha=0.8)
     + facet_wrap("~min_leaf", labeller="label_both")
+    + scale_fill_manual(values={"Training": "#d73027", "Validation": "#2166ac"})
     + theme_bw()
     + theme(axis_text=element_text(size=7), axis_title=element_text(size=8),
-            legend_title=element_text(size=7), legend_text=element_text(size=7))
-    + labs(x="Max. tree depth", y="Validation MSE", fill="n_estimators")
+            legend_title=element_text(size=7), legend_text=element_text(size=7),
+            legend_position="bottom")
+    + labs(x="Max. tree depth", y="MSE", fill=None)
 )
 rf_complexity_plot.draw()
 ```
@@ -429,15 +461,15 @@ rf_complexity_plot.draw()
 ```{python}
 #| label: fig-nn-tuning
 #| cache: true
-#| fig-cap: "NN validation MSE by architecture and L2 penalty, faceted by learning rate."
+#| fig-cap: "NN training and validation MSE by architecture, faceted by L2 penalty and learning rate. Red = training; blue = validation."
 #| fig-width: 5.5
-#| fig-height: 1.8
+#| fig-height: 2.8
 
 # ── Part (c): Neural Network – hyperparameter tuning ─────────────────────────
 # Grid over hidden layer architecture (depth/width), L2 regularisation (alpha),
-# and initial learning rate. Each configuration is fit on X_tune_df and all 8
-# configs run in parallel via joblib. Early stopping on an inner 10% split
-# prevents over-iterating during tuning.
+# and initial learning rate. Each configuration is fit on X_tune_df.
+# NN_MAX_ITER_TUNE = 200 gives Adam enough steps to differentiate configurations;
+# early stopping on an inner 10% split prevents over-fitting during tuning.
 nn_grid = [
     {"regressor__hidden_layer_sizes": h,
      "regressor__alpha":              a,
@@ -465,7 +497,8 @@ for params in nn_grid:
         "hidden_layer_sizes": params["regressor__hidden_layer_sizes"],
         "alpha":              params["regressor__alpha"],
         "learning_rate_init": params["regressor__learning_rate_init"],
-        "val_mse":            mean_squared_error(y_val, pipe.predict(X_val_df)),
+        "train_mse":          mean_squared_error(y_tune, pipe.predict(X_tune_df)),
+        "val_mse":            mean_squared_error(y_val,  pipe.predict(X_val_df)),
     })
 
 nn_results_df = pd.DataFrame(nn_results).sort_values("val_mse")
@@ -486,24 +519,30 @@ best_nn.fit(
     np.concatenate([y_train, y_val]),
 )
 
-# Complexity plot: validation MSE across architectures and regularisation levels
-nn_plot_df = nn_results_df.assign(
-    hidden_layer_sizes=lambda d: d["hidden_layer_sizes"].astype(str)
-).sort_values("val_mse")
+# Complexity plot: training and validation MSE across architectures.
+# facet_grid shows all combinations of alpha and learning_rate_init; fill
+# distinguishes the two splits to reveal the bias-variance tradeoff.
+nn_plot_long = (
+    nn_results_df
+    .assign(hidden_layer_sizes=lambda d: d["hidden_layer_sizes"].astype(str))
+    .melt(id_vars=["hidden_layer_sizes", "alpha", "learning_rate_init"],
+          value_vars=["train_mse", "val_mse"],
+          var_name="Split", value_name="MSE")
+    .assign(Split=lambda d: d["Split"].map({"train_mse": "Training", "val_mse": "Validation"}))
+)
 
 nn_complexity_plot = (
-    ggplot(
-        nn_plot_df,
-        aes(x="reorder(hidden_layer_sizes, val_mse)", y="val_mse",
-            fill="factor(alpha)"),
-    )
-    + geom_col(position="dodge")
-    + facet_wrap("~learning_rate_init", labeller="label_both")
+    ggplot(nn_plot_long,
+           aes(x="hidden_layer_sizes", y="MSE", fill="Split"))
+    + geom_col(position="dodge", alpha=0.8)
+    + facet_grid("alpha ~ learning_rate_init", labeller="label_both")
     + coord_flip()
+    + scale_fill_manual(values={"Training": "#d73027", "Validation": "#2166ac"})
     + theme_bw()
     + theme(axis_text=element_text(size=7), axis_title=element_text(size=8),
-            legend_title=element_text(size=7), legend_text=element_text(size=7))
-    + labs(x="Architecture", y="Validation MSE", fill="L2 (\u03b1)")
+            legend_title=element_text(size=7), legend_text=element_text(size=7),
+            legend_position="bottom")
+    + labs(x="Architecture", y="MSE", fill=None)
 )
 nn_complexity_plot.draw()
 ```
@@ -511,6 +550,7 @@ nn_complexity_plot.draw()
 ```{python}
 #| label: ex2-save-models
 #| cache: true
+#| output: false
 
 # ── Part (d): Save final model objects to disk ────────────────────────────────
 # Both models are full scikit-learn pipelines (preprocessor + estimator).
@@ -520,7 +560,7 @@ joblib.dump(best_rf, "model_random_forest.joblib")
 joblib.dump(best_nn, "model_neural_network.joblib")
 ```
 
-@fig-rf-tuning and @fig-nn-tuning show how model complexity affects validation MSE for the random forest and neural network respectively. The fitted model objects are saved as `model_random_forest.joblib` and `model_neural_network.joblib`. A peer reviewer can load them with:
+@fig-rf-tuning and @fig-nn-tuning show how model complexity affects training and validation MSE for the random forest and neural network respectively. Where training MSE falls substantially below validation MSE, the model is over-fitting the tuning subsample. The fitted model objects are saved as `model_random_forest.joblib` and `model_neural_network.joblib`. A peer reviewer can load them with:
 
 ```python
 import joblib
@@ -574,7 +614,7 @@ We translate the return forecasts into investment strategies by sorting stocks i
 rf_train_only = Pipeline([
     ("preprocessor", preprocessor),
     ("regressor", RandomForestRegressor(
-        n_estimators     = int(best_rf_params["regressor__n_estimators"]),
+        n_estimators     = N_ESTIMATORS_RF,
         max_depth        = int(best_rf_params["regressor__max_depth"])
                           if pd.notna(best_rf_params["regressor__max_depth"]) else None,
         min_samples_leaf = int(best_rf_params["regressor__min_samples_leaf"]),
@@ -681,11 +721,11 @@ def performance_table(ls_ret, mkt_series, label):
     t_stat    = capm.tvalues["Intercept"]
 
     return pd.DataFrame({
-        "Period":                       [label],
-        "Mean excess return (ann.)":    [f"{mean_ann:.2%}"],
-        "Sharpe ratio (ann.)":          [f"{sharpe:.2f}"],
-        "CAPM alpha (ann.)":            [f"{alpha_ann:.2%}"],
-        "t-statistic":                  [f"{t_stat:.2f}"],
+        "Period":                    [label],
+        "Mean excess return (ann.)": [mean_ann],
+        "Sharpe ratio (ann.)":       [sharpe],
+        "CAPM alpha (ann.)":         [alpha_ann],
+        "t-statistic":               [t_stat],
     })
 
 def mkt_benchmark(mkt_series, mask, label):
@@ -698,8 +738,8 @@ def mkt_benchmark(mkt_series, mask, label):
     sharpe   = mkt_sub.mean() / mkt_sub.std() * np.sqrt(MONTHS_PER_YEAR)
     return pd.DataFrame({
         "Period":                    [label],
-        "Mean excess return (ann.)": [f"{mean_ann:.2%}"],
-        "Sharpe ratio (ann.)":       [f"{sharpe:.2f}"],
+        "Mean excess return (ann.)": [mean_ann],
+        "Sharpe ratio (ann.)":       [sharpe],
     })
 
 perf = pd.concat([
@@ -714,10 +754,32 @@ bench = pd.concat([
     mkt_benchmark(mkt, test_mask, "Market – Test"),
 ], ignore_index=True)
 
-display(Markdown("**Table 2.** Long-short portfolio performance by model and period."))
-display(Markdown(perf.to_markdown(index=False)))
-display(Markdown("**Table 3.** Market benchmark performance."))
-display(Markdown(bench.to_markdown(index=False)))
+```
+
+```{python}
+#| label: tbl-performance
+#| tbl-cap: "Long-short portfolio performance by model and period."
+#| output: asis
+
+print(
+    GT(perf)
+    .fmt_percent(columns=["Mean excess return (ann.)", "CAPM alpha (ann.)"], decimals=2)
+    .fmt_number(columns=["Sharpe ratio (ann.)", "t-statistic"], decimals=2)
+    .as_latex()
+)
+```
+
+```{python}
+#| label: tbl-benchmark
+#| tbl-cap: "Market benchmark performance."
+#| output: asis
+
+print(
+    GT(bench)
+    .fmt_percent(columns=["Mean excess return (ann.)"], decimals=2)
+    .fmt_number(columns=["Sharpe ratio (ann.)"], decimals=2)
+    .as_latex()
+)
 ```
 
 ```{python}
@@ -760,24 +822,34 @@ nn_to_val  = compute_turnover(nn_val_df)
 nn_to_test = compute_turnover(nn_test_df)
 
 turnover_df = pd.DataFrame({
-    "Model":             ["RF", "RF", "NN", "NN"],
-    "Period":            ["Validation", "Test", "Validation", "Test"],
-    "Monthly turnover":  [f"{rf_to_val:.1%}", f"{rf_to_test:.1%}",
-                          f"{nn_to_val:.1%}", f"{nn_to_test:.1%}"],
+    "Model":            ["RF", "RF", "NN", "NN"],
+    "Period":           ["Validation", "Test", "Validation", "Test"],
+    "Monthly turnover": [rf_to_val, rf_to_test, nn_to_val, nn_to_test],
 })
+```
 
-display(Markdown("**Table 4.** Average monthly portfolio turnover by model and period."))
-display(Markdown(turnover_df.to_markdown(index=False)))
+```{python}
+#| label: tbl-turnover
+#| tbl-cap: "Average monthly portfolio turnover by model and period."
+#| output: asis
+
+print(
+    GT(turnover_df)
+    .fmt_percent(columns=["Monthly turnover"], decimals=1)
+    .as_latex()
+)
 ```
 
 
-Tables 2–3 show that Sharpe ratios decline from validation to test, consistent with adaptive markets correcting mispricings over time. Table 4 reports monthly portfolio turnover, which is high; this implies that transaction costs materially reduce net-of-cost profitability.
+@tbl-performance and @tbl-benchmark show that Sharpe ratios decline from validation to test, consistent with adaptive markets correcting mispricings over time.
+
+Monthly turnover is measured as $\frac{1}{2}\sum_i |w_{i,t} - w_{i,t-1}|$ averaged across the long and short legs, where $w_{i,t}$ is the value weight of stock $i$ within the leg and stocks absent from the portfolio are assigned weight zero. The factor of one-half avoids double-counting simultaneous buys and sells. @tbl-turnover reports the resulting estimates. Turnover is high across all model-period combinations, implying that transaction costs materially reduce net-of-cost profitability.
 
 ```{python}
 #| label: ex3-model-comparison
 
 # ── Part (f): Model comparison ────────────────────────────────────────────────
-# Compute CAPM alpha numerically (performance_table returns strings; need floats here).
+# _alpha_ann re-computes CAPM alpha as a scalar for the comparison logic below.
 def _alpha_ann(ls_ret, mkt_series):
     ls_ts      = pd.to_datetime(ls_ret.index).to_period("M").to_timestamp("M")
     mkt_copy   = mkt_series.copy()
@@ -889,8 +961,18 @@ top3 = (
     .assign(**{"Sharpe drop": lambda d: d["Sharpe drop"].round(3)})
 )
 
-display(Markdown("**Table 5.** Top 3 most important predictors per model (annualised Sharpe ratio drop)."))
-display(Markdown(top3.to_markdown(index=False)))
+```
+
+```{python}
+#| label: tbl-importance
+#| tbl-cap: "Top 3 most important predictors per model (annualised Sharpe ratio drop)."
+#| output: asis
+
+print(
+    GT(top3)
+    .fmt_number(columns=["Sharpe drop"], decimals=3)
+    .as_latex()
+)
 ```
 
 ```{python}
@@ -938,7 +1020,7 @@ importance_plot = (
 importance_plot.draw()
 ```
 
-@fig-variable-importance ranks predictors by the drop in annualised Sharpe ratio when each variable is zeroed out; red bars indicate the top 3 for each model.
+@tbl-importance lists the top 3 predictors per model. @fig-variable-importance ranks all predictors by the drop in annualised Sharpe ratio when each variable is zeroed out; red bars indicate the top 3 for each model.
 
 ```{python}
 #| label: ex4-model-agreement
@@ -1028,7 +1110,7 @@ display(Markdown(theory_text))
 
 ## Conclusion
 
-Replicating part of @10.1093/rfs/hhaa009, we train a random forest and neural network on ten stock characteristics and four macro variables to form long-short decile strategies. Performance declines from the validation to the test period, consistent with adaptive markets correcting mispricings over time, and high portfolio turnover implies that net-of-cost profitability is substantially lower than gross alpha. Variable importance identifies momentum and profitability as the primary drivers — consistent with GKX — and the two models differ in gross alpha and turnover, presenting a concrete trade-off for investors.
+Both models generate positive gross alpha in the validation period but fail to sustain it out of sample (@tbl-performance), consistent with adaptive markets eroding predictable mispricings over time. High monthly portfolio turnover (@tbl-turnover) implies that transaction costs materially reduce net-of-cost returns, potentially eliminating the gross advantage entirely. Variable importance analysis (@tbl-importance, @fig-variable-importance) reveals that the random forest and neural network rely on largely non-overlapping signals, reflecting the distinct inductive biases of tree-based and neural network architectures: the former favours monotone, axis-aligned splits while the latter exploits non-linear interactions among features. The practical implication is a concrete investor trade-off — neither model dominates on all criteria simultaneously, and the preferred strategy depends on the investor's transaction cost structure and tolerance for model-specific risk.
 
 ## References
 
