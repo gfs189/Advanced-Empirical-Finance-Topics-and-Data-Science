@@ -1,11 +1,12 @@
 ---
-title: Mandatory Assignment 1
-author: GFS189, RTL959
+title: "Final Exam 2026: Part 2"
+author: "GFS189, RTL959"
 date: today
 date-format: MMMM DD, YYYY
-execute: 
+execute:
   echo: false
   warning: false
+  cache: false
 bibliography: references.bib
 format:
   pdf:
@@ -21,12 +22,486 @@ format:
     lang: en
     fontsize: 12pt
     highlight-style: github-light
+    include-in-header:
+      text: |
+        \usepackage{float}
+        \usepackage{booktabs}
 ---
 
+```{python}
+#| label: setup
+#| cache: false
 
+import pandas as pd
+import numpy as np
+from pathlib import Path
+from sklearn.covariance import LedoitWolf
+from IPython.display import display, Markdown
+from great_tables import GT
+import warnings
+from plotnine import *
 
+warnings.filterwarnings("ignore")
+np.random.seed(2026)
 
+# --- Global constants --- #
+DATA_FILE   = Path("hf_minute_prices.parquet")
+FREQ        = 5       # Sampling interval in minutes (justified in Exercise 1)
+W_LW        = 252     # Rolling window for Ledoit-Wolf (one year of trading days)
+ANNUALIZE   = 252     # Trading days per year
+RIDGE_EPS   = 1e-8    # Ridge regularisation for numerical stability
+MIN_OBS     = 30      # Minimum observations required for LW fit
+CI_MULT     = 2       # Multiplier for confidence band (approx. 95%)
+```
+
+```{python}
+#| label: data-loading
+#| cache: true
+#| cache-extra: 1
+
+# Load minute-level prices; timestamps are New York wall-clock time stored as UTC
+df = (
+    pd.read_parquet(DATA_FILE)
+    .assign(ts=lambda d: d["ts"].dt.tz_localize(None))
+    .assign(date=lambda d: d["ts"].dt.date)
+)
+
+symbols  = sorted(df["symbol"].unique())   # 30 Dow Jones Industrial Average (DJIA) constituents
+N_stocks = len(symbols)
+
+# Wide format: rows = minute timestamps, columns = 30 symbols
+df_wide = (
+    df
+    .set_index(["ts", "symbol"])["price"]
+    .unstack("symbol")
+    [symbols]
+    .sort_index()
+)
+
+# Daily close-to-close log returns: last open-high-low-close (OHLC) price per day
+daily_close = (
+    df
+    .groupby(["date", "symbol"])["price"]
+    .last()
+    .unstack("symbol")
+    [symbols]
+    .sort_index()
+)
+daily_close.index = pd.to_datetime(daily_close.index)
+daily_ret = np.log(daily_close).diff()   # T_days × N matrix of daily log returns
+```
+
+## Exercise 1: Volatility Signature Plot and Sampling Choice
+
+```{python}
+#| label: ex1-sig-plot
+#| cache: true
+#| cache-extra: 1
+
+# For each Δ, compute the daily realized variance (RV) for AAPL then average across days.
+# RV_d(Δ) = Σ_k r_{k,Δ}² where r_{k,Δ} = log(p_k) − log(p_{k-1}) at interval Δ.
+deltas    = [1, 2, 5, 10, 15, 30, 60]
+aapl_data = df_wide[["AAPL"]]
+
+sig_rows = []
+for delta in deltas:
+    daily_rvs = []
+    for day, grp in aapl_data.groupby(aapl_data.index.date):
+        # Resample to Δ-minute bars; carry forward last observed price for gaps (previous-tick)
+        sampled = grp.resample(f"{delta}min").last().ffill()
+        log_ret = np.log(sampled["AAPL"]).diff().dropna()
+        if len(log_ret) >= 2:
+            daily_rvs.append(float((log_ret ** 2).sum()))
+    arr = np.array(daily_rvs)
+    se  = arr.std() / np.sqrt(len(arr))
+    sig_rows.append({
+        "delta":   delta,
+        "mean_rv": arr.mean(),
+        "lower":   arr.mean() - CI_MULT * se,
+        "upper":   arr.mean() + CI_MULT * se,
+    })
+
+signature_df = pd.DataFrame(sig_rows)
+```
+
+```{python}
+#| label: fig-sig-plot
+#| fig-cap: "Volatility signature plot for AAPL. Average daily RV per interval $\\Delta$; band = $\\pm 2$ SE. Upward bias at $\\Delta = 1$ min reflects microstructure noise; series stabilises by $\\Delta = 5$ min."
+#| fig-width: 5.2
+#| fig-height: 2.1
+#| fig-pos: H
+
+(
+    ggplot(signature_df, aes(x="delta", y="mean_rv"))
+    + geom_ribbon(aes(ymin="lower", ymax="upper"), alpha=0.22, fill="steelblue")
+    + geom_line(color="steelblue", size=0.9)
+    + geom_point(color="steelblue", size=2.5)
+    + theme_bw()
+    + labs(
+        title="Volatility signature plot: AAPL",
+        x="Sampling interval Δ (minutes)",
+        y="Avg. daily realised variance",
+    )
+)
+```
+
+The signature plot (@fig-sig-plot) displays the characteristic bias of the **realized variance (RV)** estimator: at $\Delta = 1$ minute, bid-ask bounce inflates the sum of squared log-returns above the true integrated variance [@andersen1998]. The curve stabilises by $\Delta = 5$ minutes, so we adopt **$\Delta = 5$ minutes** throughout; missing minutes are handled by **previous-tick interpolation** (carry forward last observed price).
+
+## Exercise 2: Daily Realized Covariance
+
+```{python}
+#| label: ex2-rc-compute
+#| cache: true
+#| cache-extra: 1
+
+def regularize(Sigma):
+    """Add a ridge of size RIDGE_EPS if the minimum eigenvalue is too small."""
+    lmin = np.linalg.eigvalsh(Sigma).min()
+    if lmin < RIDGE_EPS:
+        Sigma = Sigma + (abs(lmin) + RIDGE_EPS) * np.eye(Sigma.shape[0])
+    return Sigma
+
+# Compute the 30×30 realized covariance (RC) matrix for every trading day.
+# RC_d = Σ_{k=1}^{K} r_k r_k' where r_k is the N-vector of Δ-minute log returns.
+RC_dict = {}   # date -> np.ndarray (N, N)
+
+for day, grp in df_wide.groupby(df_wide.index.date):
+    sampled = grp[symbols].resample(f"{FREQ}min").last().ffill().bfill()
+    log_ret = np.log(sampled).diff().dropna(how="all").fillna(0.0)
+    R       = log_ret.values    # K × N matrix of intraday log returns
+    if R.shape[0] >= 2:
+        RC_dict[day] = R.T @ R  # RC_d = sum of outer products r_k r_k'
+```
+
+The **realized covariance (RC)** estimator $RC_d = \sum_{k=1}^{K} r_k r_k'$ sums outer products of synchronised 5-minute log-return vectors [@andersen1998; @barndorff2011]; sampling at 5 minutes reduces bid-ask bounce and previous-tick interpolation fills gaps without artificial zero returns.
+
+```{python}
+#| label: ex2b-diag-prep
+
+# Extract the diagonal (realised variances) for each stock and day, annualised
+def q25(x): return x.quantile(0.25)
+def q75(x): return x.quantile(0.75)
+
+realized_var_df = pd.DataFrame([
+    {"date": pd.Timestamp(day), "symbol": sym, "rv_ann": RC[i, i] * ANNUALIZE}
+    for day, RC in RC_dict.items()
+    for i, sym in enumerate(symbols)
+])
+
+cross_sec_stats = (
+    realized_var_df
+    .groupby("date")["rv_ann"]
+    .agg(["median", q25, q75])
+    .reset_index()
+    .rename(columns={"median": "med", "q25": "q25", "q75": "q75"})
+)
+```
+
+```{python}
+#| label: fig-rv-ts
+#| fig-cap: "Annualised daily realised variance (diagonal of $RC_d$) for all 30 DJIA stocks (grey lines), cross-sectional median (blue) and IQR (band). Spikes mark the 2008--09 crisis, March 2020, and 2022."
+#| fig-width: 6
+#| fig-height: 2.1
+#| fig-pos: H
+
+(
+    ggplot()
+    + geom_line(
+        realized_var_df, aes(x="date", y="rv_ann", group="symbol"),
+        color="grey", alpha=0.25, size=0.25,
+    )
+    + geom_ribbon(
+        cross_sec_stats, aes(x="date", ymin="q25", ymax="q75"),
+        fill="steelblue", alpha=0.30,
+    )
+    + geom_line(cross_sec_stats, aes(x="date", y="med"), color="steelblue", size=0.75)
+    + theme_bw()
+    + labs(
+        title="Annualised daily realised variance — 30 DJIA stocks",
+        x="Date",
+        y="Annualised realised variance",
+    )
+)
+```
+
+The diagonal elements of $RC_d$ (@fig-rv-ts) show strong volatility clustering with spikes at stress episodes. At one-minute sampling, off-diagonal elements would be biased toward zero by the **Epps effect** [@barndorff2011] — asynchronous trading attenuates cross-correlations — an issue that 5-minute sampling largely eliminates.
+
+## Exercise 3: Covariance Estimators
+
+```{python}
+#| label: ex3-build-estimators
+#| cache: true
+#| cache-extra: 1
+
+# Evaluation window: second half of all days covered by RC_dict
+all_rc_days = sorted(RC_dict.keys())
+midpoint    = len(all_rc_days) // 2
+eval_days   = all_rc_days[midpoint:]
+rc_idx_map  = {d: i for i, d in enumerate(all_rc_days)}
+
+Sigma_HF   = {}   # High-frequency (HF) random-walk estimator: Sigma_HF_t = RC_{t-1}
+Sigma_LW_d = {}   # Ledoit-Wolf (LW) shrinkage on rolling daily returns
+
+for t in eval_days:
+    idx = rc_idx_map.get(t)
+    if idx is None or idx == 0:
+        continue
+
+    # (a) HF random walk: yesterday's realized covariance serves as today's estimate
+    t_prev = all_rc_days[idx - 1]
+    if t_prev in RC_dict:
+        Sigma_HF[t] = regularize(RC_dict[t_prev].copy())
+
+    # (b) LW shrinkage on rolling W_LW daily log returns ending at t-1
+    t_ts    = pd.Timestamp(t)
+    ret_win = (
+        daily_ret[daily_ret.index < t_ts]
+        .iloc[-W_LW:][symbols]
+        .dropna()
+    )
+    if len(ret_win) >= MIN_OBS:
+        lw            = LedoitWolf(assume_centered=False).fit(ret_win.values)
+        Sigma_LW_d[t] = lw.covariance_
+```
+
+**(a) HF random walk.** $\hat\Sigma_t^{HF} = RC_{t-1}$ assumes the covariance follows a **martingale** — no mean reversion, no drift — which is a natural baseline when intraday data are available. **(b) LW on daily returns.** We use $W = 252$ trading days ($T/N \approx 8.4$, full-rank sample covariance); @ledoit2003 shrinkage toward a scaled identity stabilises the precision matrix.
+
+```{python}
+#| label: ex3c-compare-prep
+
+# Cross-sectional median variance: LW estimate vs. realised variance on the same day
+var_comparison = pd.DataFrame([
+    {
+        "date":   pd.Timestamp(t),
+        "lw_med": np.median(np.diag(Sigma_LW_d[t])) * ANNUALIZE,
+        "rc_med": np.median(np.diag(RC_dict[t]))     * ANNUALIZE,
+    }
+    for t in eval_days
+    if t in Sigma_LW_d and t in RC_dict
+])
+
+var_comparison_long = (
+    var_comparison
+    .melt(id_vars="date", value_vars=["lw_med", "rc_med"],
+          var_name="Estimator", value_name="Median ann. variance")
+    .assign(Estimator=lambda d: d["Estimator"].map(
+        {"lw_med": "LW (daily, W=252)", "rc_med": "RC (HF, 5-min)"}
+    ))
+)
+```
+
+```{python}
+#| label: fig-cov-compare
+#| fig-cap: "Cross-sectional median annualised variance over the evaluation window. LW (orange): rolling 252-day Ledoit-Wolf shrinkage. RC (blue): 5-min realised covariance. LW is smoother; RC reacts immediately to volatility bursts."
+#| fig-width: 5.5
+#| fig-height: 1.9
+#| fig-pos: "htb"
+
+(
+    ggplot(var_comparison_long, aes(x="date", y="Median ann. variance", color="Estimator"))
+    + geom_line(size=0.65, alpha=0.88)
+    + scale_color_manual(values=["#d95f02", "#2166ac"])
+    + theme_bw()
+    + theme(legend_position="top", legend_title=element_blank())
+    + labs(
+        title="Cross-sectional median variance: LW vs. realised",
+        x="Date",
+        y="Median annualised variance",
+    )
+)
+```
+
+@fig-cov-compare confirms that LW is substantially smoother than RC: averaging 252 daily returns damps spikes at the cost of delayed reaction to sudden volatility shifts.
+
+## Exercise 4: Minimum-Variance Portfolio Weights
+
+```{python}
+#| label: ex4-compute-weights
+
+def min_var_weights(Sigma):
+    """
+    Closed-form minimum-variance (MV) portfolio weights.
+    w* = Sigma^{-1} iota / (iota' Sigma^{-1} iota), where iota is a vector of ones.
+    """
+    N    = Sigma.shape[0]
+    iota = np.ones(N)
+    try:
+        Si_iota = np.linalg.solve(Sigma + RIDGE_EPS * np.eye(N), iota)
+    except np.linalg.LinAlgError:
+        Si_iota = np.linalg.pinv(Sigma) @ iota
+    denom = float(iota @ Si_iota)
+    return Si_iota / denom if abs(denom) > RIDGE_EPS else iota / N
+
+common_days = sorted(set(Sigma_HF) & set(Sigma_LW_d))
+
+omega_HF = {t: min_var_weights(Sigma_HF[t])   for t in common_days}
+omega_LW = {t: min_var_weights(Sigma_LW_d[t]) for t in common_days}
+
+def avg_turnover(omega_dict):
+    """Average daily turnover: (1/T) Σ_t Σ_i |ω_{i,t} − ω_{i,t-1}|."""
+    days = sorted(omega_dict)
+    tos  = [np.abs(omega_dict[days[i]] - omega_dict[days[i - 1]]).sum()
+            for i in range(1, len(days))]
+    return float(np.mean(tos))
+
+to_hf = avg_turnover(omega_HF)
+to_lw = avg_turnover(omega_LW)
+```
+
+```{python}
+#| label: ex4-weight-prep
+
+# Time-averaged weight per stock for each estimator
+hf_avg = {sym: float(np.mean([omega_HF[t][i] for t in common_days]))
+          for i, sym in enumerate(symbols)}
+lw_avg = {sym: float(np.mean([omega_LW[t][i] for t in common_days]))
+          for i, sym in enumerate(symbols)}
+
+weight_avg_df = pd.DataFrame(
+    [{"symbol": sym, "Estimator": est, "Avg. weight": avg[sym]}
+     for sym in symbols
+     for est, avg in [("HF", hf_avg), ("LW", lw_avg)]]
+)
+
+# Order stocks by ascending HF average weight so coord_flip yields descending display
+sym_order = sorted(hf_avg, key=hf_avg.get, reverse=False)
+weight_avg_df["symbol"] = pd.Categorical(
+    weight_avg_df["symbol"], categories=sym_order, ordered=True
+)
+```
+
+```{python}
+#| label: fig-weights
+#| fig-cap: "Time-averaged MV portfolio weights for the 30 DJIA stocks, ordered by HF average weight. Dashed line: equal weight ($1/30$)."
+#| fig-width: 6.0
+#| fig-height: 2.6
+#| fig-pos: H
+
+(
+    ggplot(weight_avg_df, aes(x="symbol", y="Avg. weight", color="Estimator"))
+    + geom_point(size=1.8, alpha=0.85)
+    + geom_hline(yintercept=1 / N_stocks, linetype="dashed", color="grey", size=0.55)
+    + coord_flip()
+    + scale_color_manual(values=["#2166ac", "#d95f02"])
+    + theme_bw()
+    + theme(
+        legend_position="top",
+        legend_title=element_blank(),
+        axis_text_y=element_text(size=5.5),
+    )
+    + labs(
+        title="Average MV portfolio weights (evaluation window)",
+        x="",
+        y="Average portfolio weight",
+    )
+)
+```
+
+```{python}
+#| label: ex4-extreme-text
+#| cache: false
+
+hf_max_s = max(hf_avg, key=hf_avg.get); hf_max_v = hf_avg[hf_max_s]
+hf_min_s = min(hf_avg, key=hf_avg.get); hf_min_v = hf_avg[hf_min_s]
+lw_max_s = max(lw_avg, key=lw_avg.get); lw_max_v = lw_avg[lw_max_s]
+lw_min_s = min(lw_avg, key=lw_avg.get); lw_min_v = lw_avg[lw_min_s]
+
+display(Markdown(
+    f"The HF strategy assigns its largest average weight to **{hf_max_s}** "
+    f"({hf_max_v:.3f}) and its most negative to **{hf_min_s}** ({hf_min_v:.3f}). "
+    f"The LW strategy is most positive on **{lw_max_s}** ({lw_max_v:.3f}) "
+    f"and most negative on **{lw_min_s}** ({lw_min_v:.3f}). "
+    f"Average daily turnover is **{to_hf:.3f}** (HF) and **{to_lw:.3f}** (LW), "
+    f"with the {'HF' if to_hf > to_lw else 'LW'} strategy showing higher turnover."
+))
+```
+
+Both strategies hold extreme short and long positions — a known consequence of unconstrained minimum-variance optimisation where small errors in $\hat\Sigma$ cause large weight oscillations [@ledoit2003]. The HF strategy's higher turnover follows directly from the greater day-to-day variation in $RC_{t-1}$ relative to the slow-moving LW estimate.
+
+## Exercise 5: Out-of-Sample Portfolio Evaluation
+
+```{python}
+#| label: ex5-portfolio-rets
+
+# On day t, apply weights formed from data up to t-1 to the return realised on day t+1.
+eval_sorted = sorted(common_days)
+ret_rows    = []
+
+for i, t in enumerate(eval_sorted[:-1]):
+    t_next = pd.Timestamp(eval_sorted[i + 1])
+    if t_next not in daily_ret.index:
+        continue
+    r_next = daily_ret.loc[t_next, symbols].values
+    if np.isnan(r_next).all():
+        continue
+    r_next = np.nan_to_num(r_next, nan=0.0)   # missing returns treated as zero
+
+    ret_rows.append({
+        "date":  t_next,
+        "r_hf":  float(omega_HF[t] @ r_next),
+        "r_lw":  float(omega_LW[t] @ r_next),
+        "r_ew":  float(np.ones(N_stocks) / N_stocks @ r_next),
+    })
+
+portfolio_ret = pd.DataFrame(ret_rows).set_index("date").dropna()
+```
+
+```{python}
+#| label: tbl-perf
+#| tbl-cap: "Out-of-sample performance (second half of sample). Ann. volatility = s.d. $\\times\\sqrt{252}$; Sharpe ratio = ann. mean / ann. s.d. (risk-free rate = 0, no transaction costs)."
+#| cache: false
+
+def perf(col):
+    r   = portfolio_ret[col].dropna().values
+    vol = r.std()  * np.sqrt(ANNUALIZE)
+    sr  = r.mean() / r.std() * np.sqrt(ANNUALIZE)
+    return round(vol, 4), round(sr, 3)
+
+vol_hf, sr_hf = perf("r_hf")
+vol_lw, sr_lw = perf("r_lw")
+vol_ew, sr_ew = perf("r_ew")
+
+performance_summary = pd.DataFrame({
+    "Strategy":        ["HF (RC, t-1)", "LW (W = 252)", "Equal-weighted (1/N)"],
+    "Ann. Volatility": [vol_hf, vol_lw, vol_ew],
+    "Ann. Sharpe":     [sr_hf,  sr_lw,  sr_ew],
+}).set_index("Strategy")
+
+(
+    GT(performance_summary.reset_index())
+    .tab_header(title="Out-of-sample portfolio performance")
+    .fmt_number(columns=["Ann. Volatility", "Ann. Sharpe"], decimals=3)
+    .cols_label(
+        Strategy        = "Strategy",
+        **{"Ann. Volatility": "Ann. Volatility",
+           "Ann. Sharpe":     "Ann. Sharpe"}
+    )
+)
+```
+
+```{python}
+#| label: ex5-discuss
+#| cache: false
+
+best_sr     = max([("HF", sr_hf), ("LW", sr_lw), ("EW", sr_ew)], key=lambda x: x[1])
+lowest_sr   = min([("HF", sr_hf), ("LW", sr_lw), ("EW", sr_ew)], key=lambda x: x[1])
+hf_beats_lw = sr_hf > sr_lw
+
+best_label   = {"HF": "HF (RC, t-1)", "LW": "LW (W = 252)", "EW": "Equal-weighted"}
+display(Markdown(
+    f"**{best_label[best_sr[0]]}** achieves the highest annualised Sharpe ratio "
+    f"({best_sr[1]:.3f}); **{best_label[lowest_sr[0]]}** produces the lowest "
+    f"({lowest_sr[1]:.3f}). The HF estimator "
+    f"{'outperforms' if hf_beats_lw else 'does not outperform'} "
+    f"LW on Sharpe ratio ({sr_hf:.3f} vs. {sr_lw:.3f})."
+))
+```
+
+With $K/N \approx 2.6$ intraday returns per day, $RC_d$ is a noisy estimate of the true daily covariance; in calm markets the extra noise in the HF estimator dominates its timeliness advantage, so the LW estimate — while slower to react — produces more stable weights and, here, a higher Sharpe ratio.
+
+The in-class discussion on realised kernels and portfolio choice suggests that HF covariance information translates into economically meaningful portfolio gains when (i) the universe is large ($N \gg 30$) so that estimation error in $\hat\Sigma$ binds, (ii) the true covariance changes rapidly, and (iii) information gains exceed turnover costs. With only 30 DJIA stocks, LW shrinkage of daily returns already captures the dominant covariance structure, leaving limited room for intraday data to add value [@ledoit2004].
 
 ## References
+
 ::::{#refs}
 ::::
