@@ -134,9 +134,9 @@ signature_df = pd.DataFrame(sig_rows)
 
 ```{python}
 #| label: fig-sig-plot
-#| fig-cap: "Volatility signature plot for AAPL. Average daily RV per interval $\\Delta$; band = $\\pm 2$ SE. Upward bias at $\\Delta = 1$ min reflects microstructure noise; series stabilises by $\\Delta = 5$ min."
-#| fig-width: 5.2
-#| fig-height: 2.1
+#| fig-cap: "Volatility signature plot for AAPL. Average daily RV $\\pm 2$ SE. Bias at $\\Delta = 1$ min reflects microstructure noise; stabilises at $\\Delta = 5$ min."
+#| fig-width: 4.5
+#| fig-height: 1.5
 #| fig-pos: H
 
 (
@@ -145,17 +145,15 @@ signature_df = pd.DataFrame(sig_rows)
     + geom_line(color="steelblue", size=0.9)
     + geom_point(color="steelblue", size=2.5)
     + theme_bw()
+    + theme(figure_size=(4.5, 1.6))
     + labs(
-        title="Volatility signature plot: AAPL",
         x="Sampling interval Δ (minutes)",
         y="Avg. daily realised variance",
     )
 )
 ```
 
-The signature plot (@fig-sig-plot) displays the characteristic bias of the **realized variance (RV)** estimator: at $\Delta = 1$ minute, bid-ask bounce inflates the sum of squared log-returns above the true integrated variance [@andersen1998]. The curve stabilises by $\Delta = 5$ minutes, motivating our choice of **$\Delta = 5$ minutes** throughout; missing minutes are handled by **previous-tick interpolation** (carry forward last observed price).
-
-More noise-robust alternatives exist: the two-scale realized variance (TSRV) of Zhang, Mykland, and Ait-Sahalia (2005) corrects the bias by subsampling at multiple frequencies, while the multivariate realized kernel of @barndorff2011 additionally handles asynchronous trading via refresh-time sampling, yielding a consistent positive semi-definite estimator even at high frequencies. We adopt simple 5-minute sparse sampling instead because (i) the signature plot confirms the noise bias is negligible at this frequency for DJIA stocks, (ii) the sum-of-outer-products estimator is computationally straightforward for a 30-stock universe, and (iii) the data do not provide tick-level timestamps needed to exploit refresh-time synchronisation efficiently.
+The signature plot (@fig-sig-plot) shows the characteristic upward bias of the **realized variance (RV)** estimator at $\Delta = 1$ minute, where bid-ask bounce inflates squared log-returns above the true integrated variance [@andersen1998]. The curve stabilises by $\Delta = 5$ minutes, motivating our sampling choice throughout; missing minutes are filled by **previous-tick interpolation**. We adopt 5-minute sparse sampling over noise-robust alternatives (TSRV, realized kernels) because the bias is already negligible at this frequency for DJIA stocks and the data lack the tick-level timestamps needed for refresh-time synchronisation.
 
 ## Exercise 2: Daily Realized Covariance
 
@@ -183,7 +181,7 @@ for day, grp in df_wide.groupby(df_wide.index.date):
         RC_dict[day] = R.T @ R  # RC_d = sum of outer products r_k r_k'
 ```
 
-The **realized covariance (RC)** estimator $RC_d = \sum_{k=1}^{K} r_k r_k'$ sums outer products of synchronised 5-minute log-return vectors [@andersen1998; @barndorff2011]. Gaps within each trading day are filled by previous-tick interpolation (forward-fill only), so no backward look into future prices is introduced. Any residual missing return that remains after forward-filling --- occurring when a stock has no recorded trade before the first 5-minute bar of the day --- is replaced with zero, a conservative choice that does not artificially inflate $RC_d$.
+The **realized covariance (RC)** estimator $RC_d = \sum_{k=1}^{K} r_k r_k'$ sums outer products of synchronised 5-minute log-return vectors [@andersen1998; @barndorff2011]. Intraday gaps are filled by previous-tick interpolation; any remaining missing returns are set to zero, a conservative choice that avoids inflating $RC_d$.
 
 ```{python}
 #| label: ex2b-diag-prep
@@ -209,9 +207,9 @@ cross_sec_stats = (
 
 ```{python}
 #| label: fig-rv-ts
-#| fig-cap: "Annualised daily realised variance (diagonal of $RC_d$) for all 30 DJIA stocks (grey lines), cross-sectional median (blue) and IQR (band). Spikes mark the 2008--09 crisis, March 2020, and 2022."
-#| fig-width: 6
-#| fig-height: 2.1
+#| fig-cap: "Annualised daily realised variance for all 30 DJIA stocks (grey), cross-sectional median (blue) and IQR (band). Spikes: 2008--09, March 2020, 2022."
+#| fig-width: 5.5
+#| fig-height: 1.5
 #| fig-pos: H
 
 (
@@ -226,15 +224,15 @@ cross_sec_stats = (
     )
     + geom_line(cross_sec_stats, aes(x="date", y="med"), color="steelblue", size=0.75)
     + theme_bw()
+    + theme(figure_size=(5.5, 1.6))
     + labs(
-        title="Annualised daily realised variance — 30 DJIA stocks",
         x="Date",
         y="Annualised realised variance",
     )
 )
 ```
 
-The diagonal elements of $RC_d$ (@fig-rv-ts) show three key patterns: (i) **volatility clustering** — large variance days cluster together; (ii) **positive skewness with slow decay** — a signature of the leverage effect; and (iii) **persistent cross-sectional heterogeneity** — some stocks carry materially more variance than others throughout the sample. The three most prominent spikes correspond to the 2008–09 global financial crisis, the March 2020 COVID shock, and the 2022 rate-hike episode. At one-minute sampling, off-diagonal elements would be biased toward zero by the **Epps effect** [@barndorff2011] — asynchronous trading attenuates cross-correlations — an issue that 5-minute sampling largely eliminates.
+The diagonal of $RC_d$ (@fig-rv-ts) displays volatility clustering and persistent cross-sectional heterogeneity. The three largest spikes correspond to the 2008–09 crisis, the March 2020 COVID shock, and the 2022 rate-hike episode. At one-minute sampling, off-diagonal elements would be biased toward zero by the **Epps effect** [@barndorff2011]; 5-minute sampling largely eliminates this.
 
 ## Exercise 3: Covariance Estimators
 
@@ -282,9 +280,7 @@ eval_start = pd.Timestamp(eval_days[0]).strftime("%B %d, %Y")
 eval_end   = pd.Timestamp(eval_days[-1]).strftime("%B %d, %Y")
 ```
 
-The evaluation window covers the second half of the full sample, running from `{python} eval_start` to `{python} eval_end`.
-
-**(a) HF random walk.** $\hat\Sigma_t^{HF} = RC_{t-1}$ assumes the covariance follows a **martingale** — no mean reversion, no drift — which is a natural baseline when intraday data are available. **(b) LW on daily returns.** We use $W = 252$ trading days, equivalent to one calendar year of trading. This window length reflects a bias–variance tradeoff: shorter windows reduce staleness when the true covariance shifts but increase estimation variance, while longer windows smooth out noise at the cost of delayed adaptation. One year gives $T/N \approx 8.4$, providing a full-rank sample covariance matrix while remaining timely enough to track gradual structural changes; @ledoit2003 linear shrinkage toward a scaled identity then further stabilises the precision matrix for portfolio inversion.
+The evaluation window runs from `{python} eval_start` to `{python} eval_end`. **(a) HF random walk:** $\hat\Sigma_t^{HF} = RC_{t-1}$ is a martingale baseline — natural when intraday data are available. **(b) LW on daily returns:** $W = 252$ days gives $T/N \approx 8.4$, ensuring a full-rank sample covariance; @ledoit2003 shrinkage toward a scaled identity stabilises the precision matrix for portfolio inversion.
 
 ```{python}
 #| label: ex3c-compare-prep
@@ -310,34 +306,34 @@ per_stock_df = (
 
 ```{python}
 #| label: fig-cov-compare
-#| fig-cap: "Per-stock annualised variance over the evaluation window for all 30 DJIA stocks. Each panel shows the LW-implied variance (orange, rolling 252-day Ledoit--Wolf shrinkage) and the realised variance from the diagonal of $RC_t$ (blue, 5-min). LW is consistently smoother; RC reacts immediately to volatility bursts."
-#| fig-width: 7.0
-#| fig-height: 4.0
+#| fig-cap: "Per-stock annualised variance for all 30 DJIA stocks. LW (orange, rolling 252-day shrinkage) is consistently smoother; RC (blue, 5-min) reacts immediately to volatility bursts."
+#| fig-width: 6.5
+#| fig-height: 2.2
 #| fig-pos: H
 
 (
     ggplot(per_stock_df, aes(x="date", y="Ann. variance", color="Estimator"))
     + geom_line(size=0.25, alpha=0.80)
     + scale_color_manual(values=["#2166ac", "#d95f02"])
-    + facet_wrap("symbol", ncol=6, scales="free_y")
+    + facet_wrap("symbol", ncol=10, scales="free_y")
     + theme_bw()
     + theme(
+        figure_size=(6.5, 2.0),
         legend_position="top",
         legend_title=element_blank(),
-        axis_text_x=element_text(size=4, angle=45),
-        axis_text_y=element_text(size=4),
-        strip_text=element_text(size=5),
+        axis_text_x=element_blank(),
+        axis_text_y=element_text(size=3.5),
+        strip_text=element_text(size=4.5),
         legend_text=element_text(size=7),
     )
     + labs(
-        title="LW vs. realised variance by stock (evaluation window)",
         x="",
         y="Ann. variance",
     )
 )
 ```
 
-@fig-cov-compare confirms the smoothing property of LW across all 30 stocks: the orange (LW) line is consistently flatter than the blue (RC) line, which spikes sharply during stress events such as March 2020 and 2022. The free y-axis scale reveals substantial cross-sectional heterogeneity — high-volatility stocks (e.g., NVDA, BA) show far larger absolute spikes than defensive names (e.g., KO, WMT) — a pattern that a single median would mask.
+@fig-cov-compare confirms the smoothing property of LW: the orange line is consistently flatter than the blue (RC) line, which spikes sharply during stress events. The free y-axis reveals cross-sectional heterogeneity — high-volatility stocks (e.g., NVDA, BA) spike far more than defensive names (e.g., KO, WMT).
 
 ## Exercise 4: Minimum-Variance Portfolio Weights
 
@@ -395,9 +391,9 @@ weight_avg_df["symbol"] = pd.Categorical(
 
 ```{python}
 #| label: fig-weights
-#| fig-cap: "Time-averaged MV portfolio weights for the 30 DJIA stocks, ordered by HF average weight. Dashed line: equal weight ($1/30$)."
-#| fig-width: 6.0
-#| fig-height: 2.6
+#| fig-cap: "Time-averaged MV portfolio weights for 30 DJIA stocks, ordered by HF weight. Dashed line: equal weight ($1/30$)."
+#| fig-width: 5.5
+#| fig-height: 1.8
 #| fig-pos: H
 
 (
@@ -408,12 +404,12 @@ weight_avg_df["symbol"] = pd.Categorical(
     + scale_color_manual(values=["#2166ac", "#d95f02"])
     + theme_bw()
     + theme(
+        figure_size=(5.5, 3.2),
         legend_position="top",
         legend_title=element_blank(),
         axis_text_y=element_text(size=5.5),
     )
     + labs(
-        title="Average MV portfolio weights (evaluation window)",
         x="",
         y="Average portfolio weight",
     )
@@ -439,7 +435,7 @@ display(Markdown(
 ))
 ```
 
-Both strategies hold extreme short and long positions — a known consequence of unconstrained minimum-variance optimisation where small errors in $\hat\Sigma$ cause large weight oscillations [@ledoit2003]. The HF strategy's higher turnover follows directly from the greater day-to-day variation in $RC_{t-1}$ relative to the slow-moving LW estimate.
+Both strategies hold extreme positions — a known consequence of unconstrained MV optimisation [@ledoit2003], where small estimation errors cause large weight oscillations.
 
 ## Exercise 5: Out-of-Sample Portfolio Evaluation
 
@@ -520,9 +516,7 @@ display(Markdown(
 ))
 ```
 
-Although each daily $RC_d$ matrix is estimated from $K \approx 78$ five-minute intraday returns — well above the $N = 30$ stocks needed for full rank — the **random-walk estimator uses only a single day of data** per forecast. The LW estimator, by contrast, averages over $W = 252$ daily returns, smoothing out day-to-day noise at the cost of slower adaptation to genuine covariance shifts. In the relatively calm post-2016 evaluation window, this smoothing advantage of LW dominates the timeliness advantage of $RC_{t-1}$, so the LW estimate — while slower to react — produces more stable weights and, here, a higher Sharpe ratio.
-
-The in-class discussion on realised kernels and portfolio choice suggests that HF covariance information translates into economically meaningful portfolio gains when (i) the universe is large ($N \gg 30$) so that estimation error in $\hat\Sigma$ binds, (ii) the true covariance changes rapidly, and (iii) information gains exceed turnover costs. With only 30 DJIA stocks, LW shrinkage of daily returns already captures the dominant covariance structure, leaving limited room for intraday data to add value [@ledoit2004].
+The random-walk estimator uses only a single day per forecast; in the post-2016 window, LW's smoothing advantage dominates, producing more stable weights and a higher Sharpe ratio. HF covariance information adds most value when $N \gg 30$ and the true covariance shifts rapidly [@ledoit2004]; with only 30 DJIA stocks, LW already captures the dominant structure.
 
 ## References
 
