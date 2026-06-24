@@ -655,7 +655,7 @@ Predicted returns $\hat\mu_t$ are winsorised cross-sectionally at the 1st and 99
 
 Net excess returns deduct the quadratic transaction cost implied by the optimisation objective:
 $$r_t^{\mathrm{net}} = \omega_t'\,r_{t+1} - \lambda(\omega_t - \omega_t^{+})'\hat\Sigma_t(\omega_t - \omega_t^{+}).$$
-Monthly turnover follows @hautsch2019 equation 46: $\mathrm{TO}_t = \sum_i|\omega_{i,t} - \omega_{i,t}^{+}|$. Summary statistics are reported in @tbl-ex5-table and cumulative return paths in @fig-ex5-cumplot.
+Monthly turnover follows @hautsch2019 equation 46: $\mathrm{TO}_t = \sum_i|\omega_{i,t} - \omega_{i,t}^{+}|$. For strategies without an optimised covariance model — naive $1/N$ and the short-sale constrained portfolio — the TC deduction is evaluated under $\hat\Sigma_t^{LW}$ to provide a consistent benchmark. Summary statistics are reported in @tbl-ex5-table and cumulative return paths in @fig-ex5-cumplot.
 
 ```{python}
 #| label: ex5-backtest
@@ -858,7 +858,7 @@ bt = pd.DataFrame(results).set_index("date")
 ```{python}
 #| label: tbl-ex5-table
 #| cache: false
-#| tbl-cap: "Out-of-sample performance statistics (January 2010 – December 2024). Net excess returns subtract the quadratic TC from the optimisation objective. Sharpe ratios and mean excess returns are annualised (×12 and ×$\\sqrt{12}$ respectively)."
+#| tbl-cap: "Out-of-sample performance statistics (January 2010 – December 2024). Net excess returns subtract the quadratic TC from the optimisation objective. Sharpe ratios and mean excess returns are annualised (×$\\sqrt{12}$ and ×12 respectively)."
 
 # Helper functions to annualise performance metrics from monthly return series
 def sr(r):        return r.mean() / r.std() * np.sqrt(MONTHS_PER_YEAR)  # annualised Sharpe
@@ -984,12 +984,14 @@ display(Markdown(
     f"model and LW variants of TC-MV is {sr_diff:.2f}, which is "
     f"{'small and suggests the two estimators are broadly substitutable in this backtest' if sr_diff < 0.10 else 'economically meaningful, indicating the choice of covariance regularisation has a material impact on risk-adjusted performance'}. "
     f"Average monthly turnover is {to_factor:.3f} for the factor model versus {to_lw:.3f} for LW; "
-    f"the {'higher' if to_factor > to_lw else 'lower'} turnover of the factor model reflects its "
-    f"{'less aggressive shrinkage, which allows weights to move more freely in response to changing return forecasts' if to_factor > to_lw else 'more aggressive shrinkage of off-diagonal elements, which dampens rebalancing'}."
+    f"the {'higher' if to_factor > to_lw else 'lower'} turnover of the factor model reflects "
+    f"the stability of its low-rank K=3 structure — beta estimates and factor covariances evolve "
+    f"slowly over 60-month windows, so weights shift less month to month than under LW, which "
+    f"responds more sensitively to changes in the full sample covariance matrix."
 ))
 ```
 
-The short-sale constrained portfolio implicitly regularises $\hat\Sigma^{LW}$ further, as shown by @jagannathan2003: imposing non-negativity constraints is equivalent to shrinking negative off-diagonal covariance elements to zero. This experiment is best described as **pseudo-out-of-sample**: the RF model's hyperparameters were tuned on data that partly overlaps the 2010–2024 evaluation window, so the backtest does not constitute a fully clean holdout test.
+The short-sale constrained portfolio implicitly regularises $\hat\Sigma^{LW}$ further: in the minimum-variance ($\mu=0$) case, as shown by @jagannathan2003, imposing non-negativity constraints is equivalent to shrinking negative off-diagonal covariance elements to zero. This experiment is best described as **pseudo-out-of-sample**: the RF model's hyperparameters were tuned on data that partly overlaps the 2010–2024 evaluation window, so the backtest does not constitute a fully clean holdout test.
 
 ## 6. Guest Lecture
 
