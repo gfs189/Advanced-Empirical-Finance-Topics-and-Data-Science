@@ -1,6 +1,6 @@
-﻿---
+---
 title: "Final Exam 2026: Part 2"
-author: "63, 14"
+author: "14, 63"
 date: today
 date-format: MMMM DD, YYYY
 execute:
@@ -64,7 +64,7 @@ CI_MULT     = 2       # Multiplier for confidence band (approx. 95%)
 
 ```{python}
 #| label: data-loading
-#| cache: true
+#| cache: false
 #| cache-extra: 1
 
 # Load minute-level prices; timestamps are New York wall-clock time stored as UTC
@@ -111,7 +111,7 @@ whose only input is the covariance matrix $\Sigma$. We compare two estimators of
 
 ```{python}
 #| label: ex1-sig-plot
-#| cache: true
+#| cache: false
 #| cache-extra: 1
 
 # For each Î”, compute the daily realized variance (RV) for AAPL then average across days.
@@ -171,7 +171,7 @@ where $a^2$ is the per-interval efficient-price variance and $\sigma^2$ is the n
 
 ```{python}
 #| label: ex2-rc-compute
-#| cache: true
+#| cache: false
 #| cache-extra: 1
 
 def regularize(Sigma):
@@ -250,7 +250,7 @@ The diagonal of $RC_d$ (@fig-rv-ts) displays volatility clustering and persisten
 
 ```{python}
 #| label: ex3-build-estimators
-#| cache: true
+#| cache: false
 #| cache-extra: 1
 
 # Evaluation window: second half of all days covered by RC_dict

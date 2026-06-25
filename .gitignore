@@ -22,3 +22,6 @@ aef-2026/
 .quarto/
 *_cache/
 *_files/
+
+/.quarto/
+**/*.quarto_ipynb
