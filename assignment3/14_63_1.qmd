@@ -1,6 +1,7 @@
 ---
-title: Mandatory Assignment 3
-author: 14, 63
+title: "Final exam 2026: Part 1"
+subtitle: "Characters: 11,822 (4.93 np)"
+author: "Examnumbers: 14 and 63"
 date: today
 date-format: MMMM DD, YYYY
 execute:

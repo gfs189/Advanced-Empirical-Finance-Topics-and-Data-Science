@@ -1,6 +1,7 @@
 ---
 title: "Final Exam 2026: Part 2"
-author: "14, 63"
+subtitle: "8,750 characters (3.6 np)"
+author: "Exam numbers: 14 and 63"
 date: today
 date-format: MMMM DD, YYYY
 execute:
