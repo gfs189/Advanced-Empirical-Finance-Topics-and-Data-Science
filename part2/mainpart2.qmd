@@ -1,6 +1,6 @@
 ---
 title: "Final Exam 2026: Part 2"
-author: "63, RTL959"
+author: "63, 14"
 date: today
 date-format: MMMM DD, YYYY
 execute:
@@ -50,12 +50,11 @@ from plotnine import (
 )
 
 warnings.filterwarnings("ignore")
-#we set seed for reproducibility
-np.random.seed(2026)
 
-# --- Global constants --- #
-DATA_FILE   = Path("hf_minute_prices.parquet")
-FREQ        = 5       # Sampling interval in minutes (justified in Exercise 1)
+
+#Global constants #
+DATA_FILE   = Path().resolve() / "hf_minute_prices.parquet"
+FREQ        = 30      # Sampling interval in minutes (justified in Exercise 1)
 W_LW        = 252     # Rolling window for Ledoit-Wolf (one year of trading days)
 ANNUALIZE   = 252     # Trading days per year
 RIDGE_EPS   = 1e-8    # Ridge regularisation for numerical stability
@@ -100,6 +99,14 @@ daily_close.index = pd.to_datetime(daily_close.index)
 daily_ret = np.log(daily_close).diff()   # T_days × N matrix of daily log returns
 ```
 
+## Introduction
+
+This report studies minimum-variance portfolio allocation using high-frequency intraday data for the $N = 30$ constituents of the Dow Jones Industrial Average (DJIA) over the period 2008–2025. The minimum-variance portfolio is the constrained allocation
+$$
+\omega_{MV}(\Sigma) = \arg\min_{\iota'\omega = 1} \omega'\Sigma\,\omega = \frac{\Sigma^{-1}\iota}{\iota'\Sigma^{-1}\iota},
+$$
+whose only input is the covariance matrix $\Sigma$. We compare two estimators of $\Sigma$: a **high-frequency (HF)** estimator built from intraday realized covariances [@andersen1998; @barndorff2011], and a **Ledoit-Wolf (LW)** shrinkage estimator built from daily close-to-close returns [@ledoit2003]. The central question is whether the additional intraday information in the HF estimator translates into a measurably better out-of-sample portfolio.
+
 ## Exercise 1: Volatility Signature Plot and Sampling Choice
 
 ```{python}
@@ -135,7 +142,7 @@ signature_df = pd.DataFrame(sig_rows)
 
 ```{python}
 #| label: fig-sig-plot
-#| fig-cap: "Volatility signature plot for AAPL. Average daily RV $\\pm 2$ SE. Bias at $\\Delta = 1$ min reflects microstructure noise; stabilises at $\\Delta = 5$ min."
+#| fig-cap: "Volatility signature plot for AAPL. Average daily RV $\\pm 2$ SE. Bias at $\\Delta = 1$ min reflects microstructure noise; stabilises at $\\Delta = 30$ min."
 #| fig-width: 6
 #| fig-height: 4
 #| fig-pos: H
@@ -154,7 +161,11 @@ signature_df = pd.DataFrame(sig_rows)
 )
 ```
 
-The signature plot (@fig-sig-plot) shows the characteristic upward bias of the **realized variance (RV)** estimator at $\Delta = 1$ minute, where bid-ask bounce inflates squared log-returns above the true integrated variance [@andersen1998]. The curve stabilises by $\Delta = 5$ minutes, motivating our sampling choice throughout; missing minutes are filled by **previous-tick interpolation**. We adopt 5-minute sparse sampling over noise-robust alternatives (TSRV, realized kernels) because the bias is already negligible at this frequency for DJIA stocks and the data lack the tick-level timestamps needed for refresh-time synchronisation.
+The signature plot (@fig-sig-plot) shows the characteristic upward bias of the **realized variance (RV)** estimator at $\Delta = 1$ minute, where microstructure noise inflates squared log-returns above the true integrated variance ($IV \neq RV$) [@andersen1998]. Under a simple i.i.d.\ noise model, the signal-to-noise ratio at sampling interval $\Delta_n$ is
+$$
+\pi = \frac{2a^2}{2a^2 + \sigma^2 \Delta_n},
+$$
+where $a^2$ is the per-interval efficient-price variance and $\sigma^2$ is the noise variance; as $\Delta_n$ increases $\pi \to 1$, so coarser sampling reduces the noise contribution. The curve continues to decline noticeably up to $\Delta \approx 20$ minutes before flattening at $\Delta = 30$ minutes, motivating our sampling choice throughout; missing minutes are filled by **previous-tick interpolation**. We adopt 30-minute sparse sampling over noise-robust alternatives (TSRV, realized kernels) because the bias is already negligible at this frequency, while we retain useful intraday variation relative to daily returns.
 
 ## Exercise 2: Daily Realized Covariance
 
@@ -182,7 +193,7 @@ for day, grp in df_wide.groupby(df_wide.index.date):
         RC_dict[day] = R.T @ R  # RC_d = sum of outer products r_k r_k'
 ```
 
-The **realized covariance (RC)** estimator $RC_d = \sum_{k=1}^{K} r_k r_k'$ sums outer products of synchronised 5-minute log-return vectors [@andersen1998; @barndorff2011]. Intraday gaps are filled by previous-tick interpolation; any remaining missing returns are set to zero, a conservative choice that avoids inflating $RC_d$.
+The **realized covariance (RC)** estimator $RC_d = \sum_{k=1}^{K} r_k r_k'$ sums outer products of synchronised 30-minute log-return vectors [@andersen1998; @barndorff2011]. Intraday gaps are filled by previous-tick interpolation; any remaining missing returns are set to zero, a conservative choice that avoids inflating $RC_d$.
 
 ```{python}
 #| label: ex2b-diag-prep
@@ -233,7 +244,7 @@ cross_sec_stats = (
 )
 ```
 
-The diagonal of $RC_d$ (@fig-rv-ts) displays volatility clustering and persistent cross-sectional heterogeneity. The three largest spikes correspond to the 2008–09 crisis, the March 2020 COVID shock, and the 2022 rate-hike episode. At one-minute sampling, off-diagonal elements would be biased toward zero by the **Epps effect** [@barndorff2011]; 5-minute sampling largely eliminates this.
+The diagonal of $RC_d$ (@fig-rv-ts) displays volatility clustering and persistent cross-sectional heterogeneity. The three largest spikes correspond to the 2008–09 crisis, the March 2020 COVID shock, and the 2022 rate-hike episode. At one-minute sampling, off-diagonal elements would be biased toward zero by the **Epps effect** [@barndorff2011]; 30-minute sampling largely eliminates this.
 
 ## Exercise 3: Covariance Estimators
 
@@ -281,7 +292,7 @@ eval_start = pd.Timestamp(eval_days[0]).strftime("%B %d, %Y")
 eval_end   = pd.Timestamp(eval_days[-1]).strftime("%B %d, %Y")
 ```
 
-The evaluation window runs from `{python} eval_start` to `{python} eval_end`. **(a) HF random walk:** $\hat\Sigma_t^{HF} = RC_{t-1}$ is a martingale baseline — natural when intraday data are available. **(b) LW on daily returns:** $W = 252$ days gives $T/N \approx 8.4$, ensuring a full-rank sample covariance; @ledoit2003 shrinkage toward a scaled identity stabilises the precision matrix for portfolio inversion.
+The evaluation window runs from `{python} eval_start` to `{python} eval_end`. **(a) HF random walk:** $\hat\Sigma_t^{HF} = RC_{t-1}$ uses yesterday's realized covariance as today's forecast. This implicitly assumes that the covariance matrix follows a **random walk**: $\Sigma_t = \Sigma_{t-1} + \varepsilon_t$, so that the best one-step-ahead predictor is the most recent observation. Equivalently, it treats the covariance as constant within each day and allows it to change arbitrarily between days, with no mean reversion or smoothing. **(b) LW on daily returns:** $W = 252$ days gives $T/N \approx 8.4$, ensuring a full-rank sample covariance; @ledoit2003 shrinkage toward a scaled identity stabilises the precision matrix for portfolio inversion.
 
 ```{python}
 #| label: ex3c-compare-prep
@@ -295,19 +306,19 @@ for t in eval_days:
     rc_diag = np.diag(RC_dict[t])    * ANNUALIZE
     for i, sym in enumerate(symbols):
         per_stock_rows.append({"date": pd.Timestamp(t), "symbol": sym,
-                               "LW (W=252)": lw_diag[i], "RC (HF, 5-min)": rc_diag[i]})
+                               "LW (W=252)": lw_diag[i], "RC (HF, 30-min)": rc_diag[i]})
 
 per_stock_df = (
     pd.DataFrame(per_stock_rows)
     .melt(id_vars=["date", "symbol"],
-          value_vars=["LW (W=252)", "RC (HF, 5-min)"],
+          value_vars=["LW (W=252)", "RC (HF, 30-min)"],
           var_name="Estimator", value_name="Ann. variance")
 )
 ```
 
 ```{python}
 #| label: fig-cov-compare
-#| fig-cap: "Per-stock annualised variance for all 30 DJIA stocks. LW (orange, rolling 252-day shrinkage) is consistently smoother; RC (blue, 5-min) reacts immediately to volatility bursts."
+#| fig-cap: "Per-stock annualised variance for all 30 DJIA stocks. LW (orange, rolling 252-day shrinkage) is consistently smoother; RC (blue, 30-min) reacts immediately to volatility bursts."
 #| fig-width: 6
 #| fig-height: 4
 #| fig-pos: H
@@ -334,7 +345,7 @@ per_stock_df = (
 )
 ```
 
-@fig-cov-compare confirms the smoothing property of LW: the orange line is consistently flatter than the blue (RC) line, which spikes sharply during stress events. The free y-axis reveals cross-sectional heterogeneity — high-volatility stocks (e.g., NVDA, BA) spike far more than defensive names (e.g., KO, WMT).
+@fig-cov-compare confirms the smoothing property of LW: the orange line is consistently flatter than the blue (RC) line, which spikes sharply during stress events. The free y-axis reveals cross-sectional heterogeneity, high-volatility stocks (e.g., NVDA, BA) spike far more than defensive names (e.g., KO, WMT).
 
 ## Exercise 4: Minimum-Variance Portfolio Weights
 
@@ -436,7 +447,7 @@ display(Markdown(
 ))
 ```
 
-Both strategies hold extreme positions — a known consequence of unconstrained MV optimisation [@ledoit2003], where small estimation errors cause large weight oscillations.
+Both strategies hold extreme positions, a known consequence of unconstrained MV optimisation [@ledoit2003], where small estimation errors cause large weight oscillations. The notably high HF turnover reflects the fact that each day's $RC_d$ is estimated from only $\sim$13 intraday returns, making it noisy and causing weights to shift substantially from one day to the next.
 
 ## Exercise 5: Out-of-Sample Portfolio Evaluation
 
@@ -466,9 +477,12 @@ for i, t in enumerate(eval_sorted[:-1]):
 portfolio_ret = pd.DataFrame(ret_rows).set_index("date").dropna()
 ```
 
+\newpage
+
 ```{python}
 #| label: tbl-perf
 #| tbl-cap: "Out-of-sample performance (second half of sample). Ann. volatility = s.d. $\\times\\sqrt{252}$; Sharpe ratio = ann. mean / ann. s.d. (risk-free rate = 0, no transaction costs)."
+#| tbl-pos: H
 #| cache: false
 
 def perf(col):
@@ -518,6 +532,12 @@ display(Markdown(
 ```
 
 The random-walk estimator uses only a single day per forecast; in the post-2016 window, LW's smoothing advantage dominates, producing more stable weights and a higher Sharpe ratio. HF covariance information adds most value when $N \gg 30$ and the true covariance shifts rapidly [@ledoit2004]; with only 30 DJIA stocks, LW already captures the dominant structure.
+
+More broadly, these results illustrate a recurring finding in the portfolio choice literature: statistical sophistication in covariance or return estimation does not automatically translate into out-of-sample economic gains. The equal-weighted benchmark achieves the highest Sharpe ratio here, consistent with the observation that estimation error in large covariance matrices can amplify, rather than reduce, portfolio risk. Estimators that exploit additional information, such as intraday returns, shrinkage targets, or factor structures, tend to deliver meaningful improvements when the signal-to-noise ratio is high: either the universe is large enough that noise in the sample covariance is severe, or the true covariance structure is time-varying rapidly enough that high-frequency updates are valuable. With $N = 30$ liquid, well-studied blue-chip stocks over a relatively calm post-2016 sample, neither condition is strongly met, so the naive $1/N$ rule proves difficult to beat [@ledoit2004].
+
+## Conclusion
+
+This report compared two covariance estimators for minimum-variance portfolio allocation across 30 DJIA stocks. The HF random-walk estimator exploits intraday information but produces highly unstable weights and the lowest out-of-sample Sharpe ratio, while the LW estimator, despite relying only on daily returns, delivers lower portfolio volatility and a higher Sharpe ratio through its smoothing of the covariance matrix. Neither optimised strategy outperforms the naive equal-weighted benchmark, underscoring that with a modest universe of liquid stocks, statistical sophistication in covariance estimation does not automatically translate into economic gains. Future work could explore noise-robust HF estimators such as realized kernels, longer evaluation windows, or larger universes where high-frequency covariance information is more likely to confer a competitive edge.
 
 ## References
 

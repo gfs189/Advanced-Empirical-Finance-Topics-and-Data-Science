@@ -1,6 +1,6 @@
 ---
 title: Mandatory Assignment 3
-author: GFS189, RTL959
+author: 63, 13
 date: today
 date-format: MMMM DD, YYYY
 execute:
