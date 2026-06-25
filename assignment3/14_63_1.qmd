@@ -8,7 +8,7 @@ execute:
   echo: false
   warning: false
   cache: false
-bibliography: references.bib
+bibliography: references1.bib
 format:
   pdf:
     number-sections: false

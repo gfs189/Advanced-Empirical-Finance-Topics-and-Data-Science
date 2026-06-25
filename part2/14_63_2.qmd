@@ -8,7 +8,7 @@ execute:
   echo: false
   warning: false
   cache: false
-bibliography: references.bib
+bibliography: references2.bib
 format:
   pdf:
     number-sections: true
@@ -327,7 +327,7 @@ per_stock_df = (
 (
     ggplot(per_stock_df, aes(x="date", y="Ann. variance", color="Estimator"))
     + geom_line(size=0.25, alpha=0.80)
-    + scale_color_manual(values=["#2166ac", "#d95f02"])
+    + scale_color_manual(values={"LW (W=252)": "#d95f02", "RC (HF, 30-min)": "#2166ac"})
     + facet_wrap("symbol", ncol=10, scales="free_y")
     + theme_bw()
     + theme(
