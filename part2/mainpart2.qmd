@@ -1,6 +1,6 @@
 ---
 title: "Final Exam 2026: Part 2"
-author: "GFS189, RTL959"
+author: "63, RTL959"
 date: today
 date-format: MMMM DD, YYYY
 execute:
@@ -31,7 +31,7 @@ format:
 ```{python}
 #| label: setup
 #| cache: false
-
+#importing packages used in this part
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -50,6 +50,7 @@ from plotnine import (
 )
 
 warnings.filterwarnings("ignore")
+#we set seed for reproducibility
 np.random.seed(2026)
 
 # --- Global constants --- #
@@ -135,8 +136,8 @@ signature_df = pd.DataFrame(sig_rows)
 ```{python}
 #| label: fig-sig-plot
 #| fig-cap: "Volatility signature plot for AAPL. Average daily RV $\\pm 2$ SE. Bias at $\\Delta = 1$ min reflects microstructure noise; stabilises at $\\Delta = 5$ min."
-#| fig-width: 4.5
-#| fig-height: 1.5
+#| fig-width: 6
+#| fig-height: 4
 #| fig-pos: H
 
 (
@@ -145,7 +146,7 @@ signature_df = pd.DataFrame(sig_rows)
     + geom_line(color="steelblue", size=0.9)
     + geom_point(color="steelblue", size=2.5)
     + theme_bw()
-    + theme(figure_size=(4.5, 1.6))
+    + theme(figure_size=(6, 4))
     + labs(
         x="Sampling interval Δ (minutes)",
         y="Avg. daily realised variance",
@@ -208,8 +209,8 @@ cross_sec_stats = (
 ```{python}
 #| label: fig-rv-ts
 #| fig-cap: "Annualised daily realised variance for all 30 DJIA stocks (grey), cross-sectional median (blue) and IQR (band). Spikes: 2008--09, March 2020, 2022."
-#| fig-width: 5.5
-#| fig-height: 1.5
+#| fig-width: 6
+#| fig-height: 4
 #| fig-pos: H
 
 (
@@ -224,7 +225,7 @@ cross_sec_stats = (
     )
     + geom_line(cross_sec_stats, aes(x="date", y="med"), color="steelblue", size=0.75)
     + theme_bw()
-    + theme(figure_size=(5.5, 1.6))
+    + theme(figure_size=(6, 4))
     + labs(
         x="Date",
         y="Annualised realised variance",
@@ -307,8 +308,8 @@ per_stock_df = (
 ```{python}
 #| label: fig-cov-compare
 #| fig-cap: "Per-stock annualised variance for all 30 DJIA stocks. LW (orange, rolling 252-day shrinkage) is consistently smoother; RC (blue, 5-min) reacts immediately to volatility bursts."
-#| fig-width: 6.5
-#| fig-height: 2.2
+#| fig-width: 6
+#| fig-height: 4
 #| fig-pos: H
 
 (
@@ -318,7 +319,7 @@ per_stock_df = (
     + facet_wrap("symbol", ncol=10, scales="free_y")
     + theme_bw()
     + theme(
-        figure_size=(6.5, 2.0),
+        figure_size=(6, 4),
         legend_position="top",
         legend_title=element_blank(),
         axis_text_x=element_blank(),
@@ -392,8 +393,8 @@ weight_avg_df["symbol"] = pd.Categorical(
 ```{python}
 #| label: fig-weights
 #| fig-cap: "Time-averaged MV portfolio weights for 30 DJIA stocks, ordered by HF weight. Dashed line: equal weight ($1/30$)."
-#| fig-width: 5.5
-#| fig-height: 1.8
+#| fig-width: 6
+#| fig-height: 4
 #| fig-pos: H
 
 (
@@ -404,7 +405,7 @@ weight_avg_df["symbol"] = pd.Categorical(
     + scale_color_manual(values=["#2166ac", "#d95f02"])
     + theme_bw()
     + theme(
-        figure_size=(5.5, 3.2),
+        figure_size=(6, 4),
         legend_position="top",
         legend_title=element_blank(),
         axis_text_y=element_text(size=5.5),
