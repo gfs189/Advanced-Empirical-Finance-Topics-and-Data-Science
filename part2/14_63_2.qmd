@@ -1,4 +1,4 @@
----
+﻿---
 title: "Final Exam 2026: Part 2"
 author: "63, 14"
 date: today
@@ -31,7 +31,7 @@ format:
 ```{python}
 #| label: setup
 #| cache: false
-#importing packages used in this part
+# Importing packages used in this part
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -52,8 +52,8 @@ from plotnine import (
 warnings.filterwarnings("ignore")
 
 
-#Global constants #
-DATA_FILE   = Path().resolve() / "hf_minute_prices.parquet"
+# Global constants
+DATA_FILE   = Path("./hf_minute_prices.parquet")
 FREQ        = 30      # Sampling interval in minutes (justified in Exercise 1)
 W_LW        = 252     # Rolling window for Ledoit-Wolf (one year of trading days)
 ANNUALIZE   = 252     # Trading days per year
@@ -96,12 +96,12 @@ daily_close = (
     .sort_index()
 )
 daily_close.index = pd.to_datetime(daily_close.index)
-daily_ret = np.log(daily_close).diff()   # T_days × N matrix of daily log returns
+daily_ret = np.log(daily_close).diff()   # T_days Ã— N matrix of daily log returns
 ```
 
 ## Introduction
 
-This report studies minimum-variance portfolio allocation using high-frequency intraday data for the $N = 30$ constituents of the Dow Jones Industrial Average (DJIA) over the period 2008–2025. The minimum-variance portfolio is the constrained allocation
+This report studies minimum-variance portfolio allocation using high-frequency intraday data for the $N = 30$ constituents of the Dow Jones Industrial Average (DJIA) over the period 2008-2025. The minimum-variance portfolio is the constrained allocation
 $$
 \omega_{MV}(\Sigma) = \arg\min_{\iota'\omega = 1} \omega'\Sigma\,\omega = \frac{\Sigma^{-1}\iota}{\iota'\Sigma^{-1}\iota},
 $$
@@ -114,8 +114,8 @@ whose only input is the covariance matrix $\Sigma$. We compare two estimators of
 #| cache: true
 #| cache-extra: 1
 
-# For each Δ, compute the daily realized variance (RV) for AAPL then average across days.
-# RV_d(Δ) = Σ_k r_{k,Δ}² where r_{k,Δ} = log(p_k) − log(p_{k-1}) at interval Δ.
+# For each Î”, compute the daily realized variance (RV) for AAPL then average across days.
+# RV_d(Î”) = Î£_k r_{k,Î”}Â² where r_{k,Î”} = log(p_k) âˆ’ log(p_{k-1}) at interval Î”.
 deltas    = [1, 2, 5, 10, 15, 30, 60]
 aapl_data = df_wide[["AAPL"]]
 
@@ -123,7 +123,7 @@ sig_rows = []
 for delta in deltas:
     daily_rvs = []
     for day, grp in aapl_data.groupby(aapl_data.index.date):
-        # Resample to Δ-minute bars; carry forward last observed price for gaps (previous-tick)
+        # Resample to Î”-minute bars; carry forward last observed price for gaps (previous-tick)
         sampled = grp.resample(f"{delta}min").last().ffill()
         log_ret = np.log(sampled["AAPL"]).diff().dropna()
         if len(log_ret) >= 2:
@@ -155,7 +155,7 @@ signature_df = pd.DataFrame(sig_rows)
     + theme_bw()
     + theme(figure_size=(6, 4))
     + labs(
-        x="Sampling interval Δ (minutes)",
+        x="Sampling interval Î” (minutes)",
         y="Avg. daily realised variance",
     )
 )
@@ -165,7 +165,7 @@ The signature plot (@fig-sig-plot) shows the characteristic upward bias of the *
 $$
 \pi = \frac{2a^2}{2a^2 + \sigma^2 \Delta_n},
 $$
-where $a^2$ is the per-interval efficient-price variance and $\sigma^2$ is the noise variance; as $\Delta_n$ increases $\pi \to 1$, so coarser sampling reduces the noise contribution. The curve continues to decline noticeably up to $\Delta \approx 20$ minutes before flattening at $\Delta = 30$ minutes, motivating our sampling choice throughout; missing minutes are filled by **previous-tick interpolation**. We adopt 30-minute sparse sampling over noise-robust alternatives (TSRV, realized kernels) because the bias is already negligible at this frequency, while we retain useful intraday variation relative to daily returns.
+where $a^2$ is the per-interval efficient-price variance and $\sigma^2$ is the noise variance; as $\Delta_n$ increases $\pi \to 1$, so coarser sampling reduces the noise contribution. The curve continues to decline noticeably up to $\Delta \approx 20$ minutes before flattening at $\Delta = 30$ minutes, motivating our sampling choice throughout; missing minutes are filled by **previous-tick interpolation**. We adopt 30-minute sparse sampling over noise-robust alternatives (Two-Scale Realized Variance (TSRV), realized kernels) because the bias is already negligible at this frequency, while we retain useful intraday variation relative to daily returns.
 
 ## Exercise 2: Daily Realized Covariance
 
@@ -181,15 +181,15 @@ def regularize(Sigma):
         Sigma = Sigma + (abs(lmin) + RIDGE_EPS) * np.eye(Sigma.shape[0])
     return Sigma
 
-# Compute the 30×30 realized covariance (RC) matrix for every trading day.
-# RC_d = Σ_{k=1}^{K} r_k r_k' where r_k is the N-vector of Δ-minute log returns.
+# Compute the 30Ã—30 realized covariance (RC) matrix for every trading day.
+# RC_d = Î£_{k=1}^{K} r_k r_k' where r_k is the N-vector of Î”-minute log returns.
 RC_dict = {}   # date -> np.ndarray (N, N)
 
 for day, grp in df_wide.groupby(df_wide.index.date):
     sampled = grp[symbols].resample(f"{FREQ}min").last().ffill()
     log_ret = np.log(sampled).diff().dropna(how="all").fillna(0.0)
-    R       = log_ret.values    # K × N matrix of intraday log returns
-    if R.shape[0] >= 2:
+    R       = log_ret.values    # K Ã— N matrix of intraday log returns
+    if R.shape[0] >= 2:  # need at least two intraday returns to form a non-trivial RC
         RC_dict[day] = R.T @ R  # RC_d = sum of outer products r_k r_k'
 ```
 
@@ -219,7 +219,7 @@ cross_sec_stats = (
 
 ```{python}
 #| label: fig-rv-ts
-#| fig-cap: "Annualised daily realised variance for all 30 DJIA stocks (grey), cross-sectional median (blue) and IQR (band). Spikes: 2008--09, March 2020, 2022."
+#| fig-cap: "Annualised daily realised variance for all 30 DJIA stocks (grey), cross-sectional median (blue) and interquartile range (IQR, band). Spikes: 2008--09, March 2020, 2022."
 #| fig-width: 6
 #| fig-height: 4
 #| fig-pos: H
@@ -244,7 +244,7 @@ cross_sec_stats = (
 )
 ```
 
-The diagonal of $RC_d$ (@fig-rv-ts) displays volatility clustering and persistent cross-sectional heterogeneity. The three largest spikes correspond to the 2008–09 crisis, the March 2020 COVID shock, and the 2022 rate-hike episode. At one-minute sampling, off-diagonal elements would be biased toward zero by the **Epps effect** [@barndorff2011]; 30-minute sampling largely eliminates this.
+The diagonal of $RC_d$ (@fig-rv-ts) displays volatility clustering and persistent cross-sectional heterogeneity. The three largest spikes correspond to the 2008-09 crisis, the March 2020 COVID shock, and the 2022 rate-hike episode. At one-minute sampling, off-diagonal elements would be biased toward zero by the **Epps effect** [@barndorff2011]; 30-minute sampling largely eliminates this.
 
 ## Exercise 3: Covariance Estimators
 
@@ -345,7 +345,7 @@ per_stock_df = (
 )
 ```
 
-@fig-cov-compare confirms the smoothing property of LW: the orange line is consistently flatter than the blue (RC) line, which spikes sharply during stress events. The free y-axis reveals cross-sectional heterogeneity, high-volatility stocks (e.g., NVDA, BA) spike far more than defensive names (e.g., KO, WMT).
+@fig-cov-compare confirms the smoothing property of LW: the orange line is consistently flatter than the blue (RC) line, which spikes sharply during stress events. The free y-axis reveals cross-sectional heterogeneity: high-volatility stocks (e.g., NVDA, BA) spike far more than defensive names (e.g., KO, WMT).
 
 ## Exercise 4: Minimum-Variance Portfolio Weights
 
@@ -369,7 +369,7 @@ omega_HF = {t: min_var_weights(Sigma_HF[t])   for t in common_days}
 omega_LW = {t: min_var_weights(Sigma_LW_d[t]) for t in common_days}
 
 def avg_turnover(omega_dict):
-    """Average daily turnover: (1/T) Σ_t Σ_i |ω_{i,t} − ω_{i,t-1}|."""
+    """Average daily turnover: (1/T) Î£_t Î£_i |Ï‰_{i,t} âˆ’ Ï‰_{i,t-1}|."""
     days = sorted(omega_dict)
     tos  = [np.abs(omega_dict[days[i]] - omega_dict[days[i - 1]]).sum()
             for i in range(1, len(days))]
@@ -447,7 +447,7 @@ display(Markdown(
 ))
 ```
 
-Both strategies hold extreme positions, a known consequence of unconstrained MV optimisation [@ledoit2003], where small estimation errors cause large weight oscillations. The notably high HF turnover reflects the fact that each day's $RC_d$ is estimated from only $\sim$13 intraday returns, making it noisy and causing weights to shift substantially from one day to the next.
+@fig-weights shows the time-averaged weights for all 30 stocks. Both strategies hold extreme positions, a known consequence of unconstrained MV optimisation [@ledoit2003], where small estimation errors cause large weight oscillations. The notably high HF turnover reflects the fact that each day's $RC_d$ is estimated from only ${\sim}13$ intraday returns, making it noisy and causing weights to shift substantially from one day to the next.
 
 ## Exercise 5: Out-of-Sample Portfolio Evaluation
 
@@ -537,9 +537,10 @@ More broadly, these results illustrate a recurring finding in the portfolio choi
 
 ## Conclusion
 
-This report compared two covariance estimators for minimum-variance portfolio allocation across 30 DJIA stocks. The HF random-walk estimator exploits intraday information but produces highly unstable weights and the lowest out-of-sample Sharpe ratio, while the LW estimator, despite relying only on daily returns, delivers lower portfolio volatility and a higher Sharpe ratio through its smoothing of the covariance matrix. Neither optimised strategy outperforms the naive equal-weighted benchmark, underscoring that with a modest universe of liquid stocks, statistical sophistication in covariance estimation does not automatically translate into economic gains. Future work could explore noise-robust HF estimators such as realized kernels, longer evaluation windows, or larger universes where high-frequency covariance information is more likely to confer a competitive edge.
+This report compared two covariance estimators for minimum-variance portfolio allocation across 30 DJIA stocks. The HF random-walk estimator reacts to intraday information but, with only ${\sim}13$ intraday returns per day, produces noisy forecasts that drive excessive turnover and the lowest out-of-sample Sharpe ratio. The LW estimator, despite relying only on daily returns, achieves lower portfolio volatility and a higher Sharpe ratio by smoothing out day-to-day noise. The binding constraint is the signal-to-noise ratio: with $N=30$ liquid blue-chip stocks and a relatively calm post-2016 evaluation window, neither estimator generates enough precision to overcome the equally weighted benchmark. Noise-robust HF estimators such as realized kernels, or evaluations on larger and more heterogeneous universes, are natural next steps.
 
 ## References
 
 ::::{#refs}
 ::::
+

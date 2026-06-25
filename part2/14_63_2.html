@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.9.38">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="63, 14">
+<meta name="dcterms.date" content="2026-06-25">
+
+<title>quarto-inputda96a6c5def390ce</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+/* CSS for citations */
+div.csl-bib-body { }
+div.csl-entry {
+  clear: both;
+}
+.hanging-indent div.csl-entry {
+  margin-left:2em;
+  text-indent:-2em;
+}
+div.csl-left-margin {
+  min-width:2em;
+  float:left;
+}
+div.csl-right-inline {
+  margin-left:2em;
+  padding-left:1em;
+}
+div.csl-indent {
+  margin-left: 2em;
+}</style>
+
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js" integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2" crossorigin="anonymous"></script><script src="14_63_2_files/libs/clipboard/clipboard.min.js"></script>
+<script src="14_63_2_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="14_63_2_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="14_63_2_files/libs/quarto-html/popper.min.js"></script>
+<script src="14_63_2_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="14_63_2_files/libs/quarto-html/anchor.min.js"></script>
+<link href="14_63_2_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="14_63_2_files/libs/quarto-html/quarto-syntax-highlighting-15634bcf2e68342d4ad2dfa704d543f6.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="14_63_2_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="14_63_2_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="14_63_2_files/libs/bootstrap/bootstrap-efbb37e9afcc02144ebbc7afd12a776f.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="https://cdn.jsdelivr.net/npm/requirejs@2.3.6/require.min.js" integrity="sha384-c9c+LnTbwQ3aujuU7ULEPVvgLs+Fn6fJUvIGTsuu1ZcCf11fiEubah0ttpca4ntM sha384-6V1/AdqZRWk1KAlWbKBlGhN7VG4iE/yAZcO6NZPMF8od0vukrvr0tg4qY6NSrItx" crossorigin="anonymous"></script>
+
+<script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+</head>
+
+<body class="fullcontent quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Final Exam 2026: Part 2</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>63, 14 </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">June 25, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<div id="setup" class="cell" data-cache="false" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Importing packages used in this part</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.covariance <span class="im">import</span> LedoitWolf</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> IPython.display <span class="im">import</span> display, Markdown</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> great_tables <span class="im">import</span> GT</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> warnings</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> plotnine <span class="im">import</span> (</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    ggplot, aes,</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    geom_line, geom_ribbon, geom_point, geom_hline,</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    theme_bw, theme, labs,</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    scale_color_manual,</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    coord_flip,</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    element_blank, element_text,</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    facet_wrap,</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>warnings.filterwarnings(<span class="st">"ignore"</span>)</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="co"># Global constants</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>DATA_FILE   <span class="op">=</span> Path(<span class="st">"./hf_minute_prices.parquet"</span>)</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>FREQ        <span class="op">=</span> <span class="dv">30</span>      <span class="co"># Sampling interval in minutes (justified in Exercise 1)</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>W_LW        <span class="op">=</span> <span class="dv">252</span>     <span class="co"># Rolling window for Ledoit-Wolf (one year of trading days)</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>ANNUALIZE   <span class="op">=</span> <span class="dv">252</span>     <span class="co"># Trading days per year</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>RIDGE_EPS   <span class="op">=</span> <span class="fl">1e-8</span>    <span class="co"># Ridge regularisation for numerical stability</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>MIN_OBS     <span class="op">=</span> <span class="dv">30</span>      <span class="co"># Minimum observations required for LW fit</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>CI_MULT     <span class="op">=</span> <span class="dv">2</span>       <span class="co"># Multiplier for confidence band (approx. 95%)</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="data-loading" class="cell" data-cache="true" data-cache-extra="1" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Load minute-level prices; timestamps are New York wall-clock time stored as UTC</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> (</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    pd.read_parquet(DATA_FILE)</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    .assign(ts<span class="op">=</span><span class="kw">lambda</span> d: d[<span class="st">"ts"</span>].dt.tz_localize(<span class="va">None</span>))</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    .assign(date<span class="op">=</span><span class="kw">lambda</span> d: d[<span class="st">"ts"</span>].dt.date)</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>symbols  <span class="op">=</span> <span class="bu">sorted</span>(df[<span class="st">"symbol"</span>].unique())   <span class="co"># 30 Dow Jones Industrial Average (DJIA) constituents</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>N_stocks <span class="op">=</span> <span class="bu">len</span>(symbols)</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Wide format: rows = minute timestamps, columns = 30 symbols</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>df_wide <span class="op">=</span> (</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    df</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    .set_index([<span class="st">"ts"</span>, <span class="st">"symbol"</span>])[<span class="st">"price"</span>]</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    .unstack(<span class="st">"symbol"</span>)</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    [symbols]</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    .sort_index()</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Daily close-to-close log returns: last open-high-low-close (OHLC) price per day</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>daily_close <span class="op">=</span> (</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    df</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    .groupby([<span class="st">"date"</span>, <span class="st">"symbol"</span>])[<span class="st">"price"</span>]</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    .last()</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    .unstack(<span class="st">"symbol"</span>)</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    [symbols]</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>    .sort_index()</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>daily_close.index <span class="op">=</span> pd.to_datetime(daily_close.index)</span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>daily_ret <span class="op">=</span> np.log(daily_close).diff()   <span class="co"># T_days Ã— N matrix of daily log returns</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<section id="introduction" class="level2">
+<h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
+<p>This report studies minimum-variance portfolio allocation using high-frequency intraday data for the <span class="math inline">\(N = 30\)</span> constituents of the Dow Jones Industrial Average (DJIA) over the period 2008-2025. The minimum-variance portfolio is the constrained allocation <span class="math display">\[
+\omega_{MV}(\Sigma) = \arg\min_{\iota'\omega = 1} \omega'\Sigma\,\omega = \frac{\Sigma^{-1}\iota}{\iota'\Sigma^{-1}\iota},
+\]</span> whose only input is the covariance matrix <span class="math inline">\(\Sigma\)</span>. We compare two estimators of <span class="math inline">\(\Sigma\)</span>: a <strong>high-frequency (HF)</strong> estimator built from intraday realized covariances <span class="citation" data-cites="andersen1998 barndorff2011">[@andersen1998; @barndorff2011]</span>, and a <strong>Ledoit-Wolf (LW)</strong> shrinkage estimator built from daily close-to-close returns <span class="citation" data-cites="ledoit2003">[@ledoit2003]</span>. The central question is whether the additional intraday information in the HF estimator translates into a measurably better out-of-sample portfolio.</p>
+</section>
+<section id="exercise-1-volatility-signature-plot-and-sampling-choice" class="level2">
+<h2 class="anchored" data-anchor-id="exercise-1-volatility-signature-plot-and-sampling-choice">Exercise 1: Volatility Signature Plot and Sampling Choice</h2>
+<div id="ex1-sig-plot" class="cell" data-cache="true" data-cache-extra="1" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># For each Î”, compute the daily realized variance (RV) for AAPL then average across days.</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="co"># RV_d(Î”) = Î£_k r_{k,Î”}Â² where r_{k,Î”} = log(p_k) âˆ’ log(p_{k-1}) at interval Î”.</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>deltas    <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">5</span>, <span class="dv">10</span>, <span class="dv">15</span>, <span class="dv">30</span>, <span class="dv">60</span>]</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>aapl_data <span class="op">=</span> df_wide[[<span class="st">"AAPL"</span>]]</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>sig_rows <span class="op">=</span> []</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> delta <span class="kw">in</span> deltas:</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    daily_rvs <span class="op">=</span> []</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> day, grp <span class="kw">in</span> aapl_data.groupby(aapl_data.index.date):</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Resample to Î”-minute bars; carry forward last observed price for gaps (previous-tick)</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        sampled <span class="op">=</span> grp.resample(<span class="ss">f"</span><span class="sc">{</span>delta<span class="sc">}</span><span class="ss">min"</span>).last().ffill()</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        log_ret <span class="op">=</span> np.log(sampled[<span class="st">"AAPL"</span>]).diff().dropna()</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="bu">len</span>(log_ret) <span class="op">&gt;=</span> <span class="dv">2</span>:</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>            daily_rvs.append(<span class="bu">float</span>((log_ret <span class="op">**</span> <span class="dv">2</span>).<span class="bu">sum</span>()))</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    arr <span class="op">=</span> np.array(daily_rvs)</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    se  <span class="op">=</span> arr.std() <span class="op">/</span> np.sqrt(<span class="bu">len</span>(arr))</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    sig_rows.append({</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">"delta"</span>:   delta,</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>        <span class="st">"mean_rv"</span>: arr.mean(),</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>        <span class="st">"lower"</span>:   arr.mean() <span class="op">-</span> CI_MULT <span class="op">*</span> se,</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>        <span class="st">"upper"</span>:   arr.mean() <span class="op">+</span> CI_MULT <span class="op">*</span> se,</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    })</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>signature_df <span class="op">=</span> pd.DataFrame(sig_rows)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="cell-fig-sig-plot" class="cell" data-fig-height="4" data-fig-width="6" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>(</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    ggplot(signature_df, aes(x<span class="op">=</span><span class="st">"delta"</span>, y<span class="op">=</span><span class="st">"mean_rv"</span>))</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> geom_ribbon(aes(ymin<span class="op">=</span><span class="st">"lower"</span>, ymax<span class="op">=</span><span class="st">"upper"</span>), alpha<span class="op">=</span><span class="fl">0.22</span>, fill<span class="op">=</span><span class="st">"steelblue"</span>)</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> geom_line(color<span class="op">=</span><span class="st">"steelblue"</span>, size<span class="op">=</span><span class="fl">0.9</span>)</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> geom_point(color<span class="op">=</span><span class="st">"steelblue"</span>, size<span class="op">=</span><span class="fl">2.5</span>)</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> theme_bw()</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> theme(figure_size<span class="op">=</span>(<span class="dv">6</span>, <span class="dv">4</span>))</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> labs(</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>        x<span class="op">=</span><span class="st">"Sampling interval Î” (minutes)"</span>,</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>        y<span class="op">=</span><span class="st">"Avg. daily realised variance"</span>,</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display" data-execution_count="4">
+<div id="fig-sig-plot" class="quarto-float quarto-figure quarto-figure-center anchored" data-fig-pos="H">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-sig-plot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="14_63_2_files/figure-html/fig-sig-plot-output-1.png" data-fig-pos="H" width="576" height="384" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-sig-plot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;1: Volatility signature plot for AAPL. Average daily RV <span class="math inline">\(\pm 2\)</span> SE. Bias at <span class="math inline">\(\Delta = 1\)</span> min reflects microstructure noise; stabilises at <span class="math inline">\(\Delta = 30\)</span> min.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>The signature plot (<a href="#fig-sig-plot" class="quarto-xref">Figure&nbsp;1</a>) shows the characteristic upward bias of the <strong>realized variance (RV)</strong> estimator at <span class="math inline">\(\Delta = 1\)</span> minute, where microstructure noise inflates squared log-returns above the true integrated variance (<span class="math inline">\(IV \neq RV\)</span>) <span class="citation" data-cites="andersen1998">[@andersen1998]</span>. Under a simple i.i.d.&nbsp;noise model, the signal-to-noise ratio at sampling interval <span class="math inline">\(\Delta_n\)</span> is <span class="math display">\[
+\pi = \frac{2a^2}{2a^2 + \sigma^2 \Delta_n},
+\]</span> where <span class="math inline">\(a^2\)</span> is the per-interval efficient-price variance and <span class="math inline">\(\sigma^2\)</span> is the noise variance; as <span class="math inline">\(\Delta_n\)</span> increases <span class="math inline">\(\pi \to 1\)</span>, so coarser sampling reduces the noise contribution. The curve continues to decline noticeably up to <span class="math inline">\(\Delta \approx 20\)</span> minutes before flattening at <span class="math inline">\(\Delta = 30\)</span> minutes, motivating our sampling choice throughout; missing minutes are filled by <strong>previous-tick interpolation</strong>. We adopt 30-minute sparse sampling over noise-robust alternatives (Two-Scale Realized Variance (TSRV), realized kernels) because the bias is already negligible at this frequency, while we retain useful intraday variation relative to daily returns.</p>
+</section>
+<section id="exercise-2-daily-realized-covariance" class="level2">
+<h2 class="anchored" data-anchor-id="exercise-2-daily-realized-covariance">Exercise 2: Daily Realized Covariance</h2>
+<div id="ex2-rc-compute" class="cell" data-cache="true" data-cache-extra="1" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> regularize(Sigma):</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Add a ridge of size RIDGE_EPS if the minimum eigenvalue is too small."""</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    lmin <span class="op">=</span> np.linalg.eigvalsh(Sigma).<span class="bu">min</span>()</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> lmin <span class="op">&lt;</span> RIDGE_EPS:</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>        Sigma <span class="op">=</span> Sigma <span class="op">+</span> (<span class="bu">abs</span>(lmin) <span class="op">+</span> RIDGE_EPS) <span class="op">*</span> np.eye(Sigma.shape[<span class="dv">0</span>])</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> Sigma</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute the 30Ã—30 realized covariance (RC) matrix for every trading day.</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="co"># RC_d = Î£_{k=1}^{K} r_k r_k' where r_k is the N-vector of Î”-minute log returns.</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>RC_dict <span class="op">=</span> {}   <span class="co"># date -&gt; np.ndarray (N, N)</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> day, grp <span class="kw">in</span> df_wide.groupby(df_wide.index.date):</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    sampled <span class="op">=</span> grp[symbols].resample(<span class="ss">f"</span><span class="sc">{</span>FREQ<span class="sc">}</span><span class="ss">min"</span>).last().ffill()</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    log_ret <span class="op">=</span> np.log(sampled).diff().dropna(how<span class="op">=</span><span class="st">"all"</span>).fillna(<span class="fl">0.0</span>)</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    R       <span class="op">=</span> log_ret.values    <span class="co"># K Ã— N matrix of intraday log returns</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> R.shape[<span class="dv">0</span>] <span class="op">&gt;=</span> <span class="dv">2</span>:  <span class="co"># need at least two intraday returns to form a non-trivial RC</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>        RC_dict[day] <span class="op">=</span> R.T <span class="op">@</span> R  <span class="co"># RC_d = sum of outer products r_k r_k'</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>The <strong>realized covariance (RC)</strong> estimator <span class="math inline">\(RC_d = \sum_{k=1}^{K} r_k r_k'\)</span> sums outer products of synchronised 30-minute log-return vectors <span class="citation" data-cites="andersen1998 barndorff2011">[@andersen1998; @barndorff2011]</span>. Intraday gaps are filled by previous-tick interpolation; any remaining missing returns are set to zero, a conservative choice that avoids inflating <span class="math inline">\(RC_d\)</span>.</p>
+<div id="ex2b-diag-prep" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Extract the diagonal (realised variances) for each stock and day, annualised</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> q25(x): <span class="cf">return</span> x.quantile(<span class="fl">0.25</span>)</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> q75(x): <span class="cf">return</span> x.quantile(<span class="fl">0.75</span>)</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>realized_var_df <span class="op">=</span> pd.DataFrame([</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    {<span class="st">"date"</span>: pd.Timestamp(day), <span class="st">"symbol"</span>: sym, <span class="st">"rv_ann"</span>: RC[i, i] <span class="op">*</span> ANNUALIZE}</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> day, RC <span class="kw">in</span> RC_dict.items()</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i, sym <span class="kw">in</span> <span class="bu">enumerate</span>(symbols)</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>])</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>cross_sec_stats <span class="op">=</span> (</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    realized_var_df</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>    .groupby(<span class="st">"date"</span>)[<span class="st">"rv_ann"</span>]</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>    .agg([<span class="st">"median"</span>, q25, q75])</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    .reset_index()</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>    .rename(columns<span class="op">=</span>{<span class="st">"median"</span>: <span class="st">"med"</span>, <span class="st">"q25"</span>: <span class="st">"q25"</span>, <span class="st">"q75"</span>: <span class="st">"q75"</span>})</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="cell-fig-rv-ts" class="cell" data-fig-height="4" data-fig-width="6" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>(</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    ggplot()</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> geom_line(</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>        realized_var_df, aes(x<span class="op">=</span><span class="st">"date"</span>, y<span class="op">=</span><span class="st">"rv_ann"</span>, group<span class="op">=</span><span class="st">"symbol"</span>),</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span><span class="st">"grey"</span>, alpha<span class="op">=</span><span class="fl">0.25</span>, size<span class="op">=</span><span class="fl">0.25</span>,</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> geom_ribbon(</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>        cross_sec_stats, aes(x<span class="op">=</span><span class="st">"date"</span>, ymin<span class="op">=</span><span class="st">"q25"</span>, ymax<span class="op">=</span><span class="st">"q75"</span>),</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>        fill<span class="op">=</span><span class="st">"steelblue"</span>, alpha<span class="op">=</span><span class="fl">0.30</span>,</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> geom_line(cross_sec_stats, aes(x<span class="op">=</span><span class="st">"date"</span>, y<span class="op">=</span><span class="st">"med"</span>), color<span class="op">=</span><span class="st">"steelblue"</span>, size<span class="op">=</span><span class="fl">0.75</span>)</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> theme_bw()</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> theme(figure_size<span class="op">=</span>(<span class="dv">6</span>, <span class="dv">4</span>))</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> labs(</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>        x<span class="op">=</span><span class="st">"Date"</span>,</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>        y<span class="op">=</span><span class="st">"Annualised realised variance"</span>,</span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display" data-execution_count="7">
+<div id="fig-rv-ts" class="quarto-float quarto-figure quarto-figure-center anchored" data-fig-pos="H">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-rv-ts-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="14_63_2_files/figure-html/fig-rv-ts-output-1.png" data-fig-pos="H" width="576" height="384" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-rv-ts-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2: Annualised daily realised variance for all 30 DJIA stocks (grey), cross-sectional median (blue) and interquartile range (IQR, band). Spikes: 2008–09, March 2020, 2022.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>The diagonal of <span class="math inline">\(RC_d\)</span> (<a href="#fig-rv-ts" class="quarto-xref">Figure&nbsp;2</a>) displays volatility clustering and persistent cross-sectional heterogeneity. The three largest spikes correspond to the 2008-09 crisis, the March 2020 COVID shock, and the 2022 rate-hike episode. At one-minute sampling, off-diagonal elements would be biased toward zero by the <strong>Epps effect</strong> <span class="citation" data-cites="barndorff2011">[@barndorff2011]</span>; 30-minute sampling largely eliminates this.</p>
+</section>
+<section id="exercise-3-covariance-estimators" class="level2">
+<h2 class="anchored" data-anchor-id="exercise-3-covariance-estimators">Exercise 3: Covariance Estimators</h2>
+<div id="ex3-build-estimators" class="cell" data-cache="true" data-cache-extra="1" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Evaluation window: second half of all days covered by RC_dict</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>all_rc_days <span class="op">=</span> <span class="bu">sorted</span>(RC_dict.keys())</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>midpoint    <span class="op">=</span> <span class="bu">len</span>(all_rc_days) <span class="op">//</span> <span class="dv">2</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>eval_days   <span class="op">=</span> all_rc_days[midpoint:]</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>rc_idx_map  <span class="op">=</span> {d: i <span class="cf">for</span> i, d <span class="kw">in</span> <span class="bu">enumerate</span>(all_rc_days)}</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>Sigma_HF   <span class="op">=</span> {}   <span class="co"># High-frequency (HF) random-walk estimator: Sigma_HF_t = RC_{t-1}</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>Sigma_LW_d <span class="op">=</span> {}   <span class="co"># Ledoit-Wolf (LW) shrinkage on rolling daily returns</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> eval_days:</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>    idx <span class="op">=</span> rc_idx_map.get(t)</span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> idx <span class="kw">is</span> <span class="va">None</span> <span class="kw">or</span> idx <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>    <span class="co"># (a) HF random walk: yesterday's realized covariance serves as today's estimate</span></span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>    t_prev <span class="op">=</span> all_rc_days[idx <span class="op">-</span> <span class="dv">1</span>]</span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> t_prev <span class="kw">in</span> RC_dict:</span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>        Sigma_HF[t] <span class="op">=</span> regularize(RC_dict[t_prev].copy())</span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>    <span class="co"># (b) LW shrinkage on rolling W_LW daily log returns ending at t-1</span></span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>    t_ts    <span class="op">=</span> pd.Timestamp(t)</span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>    ret_win <span class="op">=</span> (</span>
+<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a>        daily_ret[daily_ret.index <span class="op">&lt;</span> t_ts]</span>
+<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a>        .iloc[<span class="op">-</span>W_LW:][symbols]</span>
+<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a>        .dropna()</span>
+<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">len</span>(ret_win) <span class="op">&gt;=</span> MIN_OBS:</span>
+<span id="cb8-28"><a href="#cb8-28" aria-hidden="true" tabindex="-1"></a>        lw            <span class="op">=</span> LedoitWolf(assume_centered<span class="op">=</span><span class="va">False</span>).fit(ret_win.values)</span>
+<span id="cb8-29"><a href="#cb8-29" aria-hidden="true" tabindex="-1"></a>        Sigma_LW_d[t] <span class="op">=</span> lw.covariance_</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="ex3-window-dates" class="cell" data-cache="false" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>eval_start <span class="op">=</span> pd.Timestamp(eval_days[<span class="dv">0</span>]).strftime(<span class="st">"%B </span><span class="sc">%d</span><span class="st">, %Y"</span>)</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>eval_end   <span class="op">=</span> pd.Timestamp(eval_days[<span class="op">-</span><span class="dv">1</span>]).strftime(<span class="st">"%B </span><span class="sc">%d</span><span class="st">, %Y"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>The evaluation window runs from January 17, 2017 to November 14, 2025. <strong>(a) HF random walk:</strong> <span class="math inline">\(\hat\Sigma_t^{HF} = RC_{t-1}\)</span> uses yesterday’s realized covariance as today’s forecast. This implicitly assumes that the covariance matrix follows a <strong>random walk</strong>: <span class="math inline">\(\Sigma_t = \Sigma_{t-1} + \varepsilon_t\)</span>, so that the best one-step-ahead predictor is the most recent observation. Equivalently, it treats the covariance as constant within each day and allows it to change arbitrarily between days, with no mean reversion or smoothing. <strong>(b) LW on daily returns:</strong> <span class="math inline">\(W = 252\)</span> days gives <span class="math inline">\(T/N \approx 8.4\)</span>, ensuring a full-rank sample covariance; <span class="citation" data-cites="ledoit2003">@ledoit2003</span> shrinkage toward a scaled identity stabilises the precision matrix for portfolio inversion.</p>
+<div id="ex3c-compare-prep" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Per-stock LW variance (i-th diagonal of Sigma_LW_d) vs RC variance (i-th diagonal of RC_dict)</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>per_stock_rows <span class="op">=</span> []</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> eval_days:</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> t <span class="kw">not</span> <span class="kw">in</span> Sigma_LW_d <span class="kw">or</span> t <span class="kw">not</span> <span class="kw">in</span> RC_dict:</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    lw_diag <span class="op">=</span> np.diag(Sigma_LW_d[t]) <span class="op">*</span> ANNUALIZE</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    rc_diag <span class="op">=</span> np.diag(RC_dict[t])    <span class="op">*</span> ANNUALIZE</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i, sym <span class="kw">in</span> <span class="bu">enumerate</span>(symbols):</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>        per_stock_rows.append({<span class="st">"date"</span>: pd.Timestamp(t), <span class="st">"symbol"</span>: sym,</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>                               <span class="st">"LW (W=252)"</span>: lw_diag[i], <span class="st">"RC (HF, 30-min)"</span>: rc_diag[i]})</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>per_stock_df <span class="op">=</span> (</span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>    pd.DataFrame(per_stock_rows)</span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>    .melt(id_vars<span class="op">=</span>[<span class="st">"date"</span>, <span class="st">"symbol"</span>],</span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>          value_vars<span class="op">=</span>[<span class="st">"LW (W=252)"</span>, <span class="st">"RC (HF, 30-min)"</span>],</span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>          var_name<span class="op">=</span><span class="st">"Estimator"</span>, value_name<span class="op">=</span><span class="st">"Ann. variance"</span>)</span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="cell-fig-cov-compare" class="cell" data-fig-height="4" data-fig-width="6" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>(</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    ggplot(per_stock_df, aes(x<span class="op">=</span><span class="st">"date"</span>, y<span class="op">=</span><span class="st">"Ann. variance"</span>, color<span class="op">=</span><span class="st">"Estimator"</span>))</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> geom_line(size<span class="op">=</span><span class="fl">0.25</span>, alpha<span class="op">=</span><span class="fl">0.80</span>)</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> scale_color_manual(values<span class="op">=</span>[<span class="st">"#2166ac"</span>, <span class="st">"#d95f02"</span>])</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> facet_wrap(<span class="st">"symbol"</span>, ncol<span class="op">=</span><span class="dv">10</span>, scales<span class="op">=</span><span class="st">"free_y"</span>)</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> theme_bw()</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> theme(</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>        figure_size<span class="op">=</span>(<span class="dv">6</span>, <span class="dv">4</span>),</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>        legend_position<span class="op">=</span><span class="st">"top"</span>,</span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>        legend_title<span class="op">=</span>element_blank(),</span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>        axis_text_x<span class="op">=</span>element_blank(),</span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>        axis_text_y<span class="op">=</span>element_text(size<span class="op">=</span><span class="fl">3.5</span>),</span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>        strip_text<span class="op">=</span>element_text(size<span class="op">=</span><span class="fl">4.5</span>),</span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>        legend_text<span class="op">=</span>element_text(size<span class="op">=</span><span class="dv">7</span>),</span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> labs(</span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>        x<span class="op">=</span><span class="st">""</span>,</span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>        y<span class="op">=</span><span class="st">"Ann. variance"</span>,</span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display" data-execution_count="11">
+<div id="fig-cov-compare" class="quarto-float quarto-figure quarto-figure-center anchored" data-fig-pos="H">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-cov-compare-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="14_63_2_files/figure-html/fig-cov-compare-output-1.png" data-fig-pos="H" width="576" height="384" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-cov-compare-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3: Per-stock annualised variance for all 30 DJIA stocks. LW (orange, rolling 252-day shrinkage) is consistently smoother; RC (blue, 30-min) reacts immediately to volatility bursts.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p><a href="#fig-cov-compare" class="quarto-xref">Figure&nbsp;3</a> confirms the smoothing property of LW: the orange line is consistently flatter than the blue (RC) line, which spikes sharply during stress events. The free y-axis reveals cross-sectional heterogeneity: high-volatility stocks (e.g., NVDA, BA) spike far more than defensive names (e.g., KO, WMT).</p>
+</section>
+<section id="exercise-4-minimum-variance-portfolio-weights" class="level2">
+<h2 class="anchored" data-anchor-id="exercise-4-minimum-variance-portfolio-weights">Exercise 4: Minimum-Variance Portfolio Weights</h2>
+<div id="ex4-compute-weights" class="cell" data-execution_count="12">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> min_var_weights(Sigma):</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Closed-form MV weights: w* = Sigma^{-1} iota / (iota' Sigma^{-1} iota)."""</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    N    <span class="op">=</span> Sigma.shape[<span class="dv">0</span>]</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    iota <span class="op">=</span> np.ones(N)</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>        Si_iota <span class="op">=</span> np.linalg.solve(Sigma, iota)</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> np.linalg.LinAlgError:</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>        Si_iota <span class="op">=</span> np.linalg.pinv(Sigma) <span class="op">@</span> iota</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    denom <span class="op">=</span> <span class="bu">float</span>(iota <span class="op">@</span> Si_iota)</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> Si_iota <span class="op">/</span> denom <span class="cf">if</span> <span class="bu">abs</span>(denom) <span class="op">&gt;</span> RIDGE_EPS <span class="cf">else</span> iota <span class="op">/</span> N</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>common_days <span class="op">=</span> <span class="bu">sorted</span>(<span class="bu">set</span>(Sigma_HF) <span class="op">&amp;</span> <span class="bu">set</span>(Sigma_LW_d))</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>omega_HF <span class="op">=</span> {t: min_var_weights(Sigma_HF[t])   <span class="cf">for</span> t <span class="kw">in</span> common_days}</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>omega_LW <span class="op">=</span> {t: min_var_weights(Sigma_LW_d[t]) <span class="cf">for</span> t <span class="kw">in</span> common_days}</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> avg_turnover(omega_dict):</span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Average daily turnover: (1/T) Î£_t Î£_i |Ï‰_{i,t} âˆ’ Ï‰_{i,t-1}|."""</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>    days <span class="op">=</span> <span class="bu">sorted</span>(omega_dict)</span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>    tos  <span class="op">=</span> [np.<span class="bu">abs</span>(omega_dict[days[i]] <span class="op">-</span> omega_dict[days[i <span class="op">-</span> <span class="dv">1</span>]]).<span class="bu">sum</span>()</span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1</span>, <span class="bu">len</span>(days))]</span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">float</span>(np.mean(tos))</span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>to_hf <span class="op">=</span> avg_turnover(omega_HF)</span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>to_lw <span class="op">=</span> avg_turnover(omega_LW)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="ex4-weight-prep" class="cell" data-execution_count="13">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Time-averaged weight per stock for each estimator</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>hf_avg <span class="op">=</span> {sym: <span class="bu">float</span>(np.mean([omega_HF[t][i] <span class="cf">for</span> t <span class="kw">in</span> common_days]))</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>          <span class="cf">for</span> i, sym <span class="kw">in</span> <span class="bu">enumerate</span>(symbols)}</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>lw_avg <span class="op">=</span> {sym: <span class="bu">float</span>(np.mean([omega_LW[t][i] <span class="cf">for</span> t <span class="kw">in</span> common_days]))</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>          <span class="cf">for</span> i, sym <span class="kw">in</span> <span class="bu">enumerate</span>(symbols)}</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>weight_avg_df <span class="op">=</span> pd.DataFrame(</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    [{<span class="st">"symbol"</span>: sym, <span class="st">"Estimator"</span>: est, <span class="st">"Avg. weight"</span>: avg[sym]}</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>     <span class="cf">for</span> sym <span class="kw">in</span> symbols</span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>     <span class="cf">for</span> est, avg <span class="kw">in</span> [(<span class="st">"HF"</span>, hf_avg), (<span class="st">"LW"</span>, lw_avg)]]</span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Order stocks by ascending HF average weight so coord_flip yields descending display</span></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>sym_order <span class="op">=</span> <span class="bu">sorted</span>(hf_avg, key<span class="op">=</span>hf_avg.get, reverse<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>weight_avg_df[<span class="st">"symbol"</span>] <span class="op">=</span> pd.Categorical(</span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>    weight_avg_df[<span class="st">"symbol"</span>], categories<span class="op">=</span>sym_order, ordered<span class="op">=</span><span class="va">True</span></span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="cell-fig-weights" class="cell" data-fig-height="4" data-fig-width="6" data-execution_count="14">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>(</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    ggplot(weight_avg_df, aes(x<span class="op">=</span><span class="st">"symbol"</span>, y<span class="op">=</span><span class="st">"Avg. weight"</span>, color<span class="op">=</span><span class="st">"Estimator"</span>))</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> geom_point(size<span class="op">=</span><span class="fl">1.8</span>, alpha<span class="op">=</span><span class="fl">0.85</span>)</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> geom_hline(yintercept<span class="op">=</span><span class="dv">1</span> <span class="op">/</span> N_stocks, linetype<span class="op">=</span><span class="st">"dashed"</span>, color<span class="op">=</span><span class="st">"grey"</span>, size<span class="op">=</span><span class="fl">0.55</span>)</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> coord_flip()</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> scale_color_manual(values<span class="op">=</span>[<span class="st">"#2166ac"</span>, <span class="st">"#d95f02"</span>])</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> theme_bw()</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> theme(</span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>        figure_size<span class="op">=</span>(<span class="dv">6</span>, <span class="dv">4</span>),</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>        legend_position<span class="op">=</span><span class="st">"top"</span>,</span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>        legend_title<span class="op">=</span>element_blank(),</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>        axis_text_y<span class="op">=</span>element_text(size<span class="op">=</span><span class="fl">5.5</span>),</span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">+</span> labs(</span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>        x<span class="op">=</span><span class="st">""</span>,</span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>        y<span class="op">=</span><span class="st">"Average portfolio weight"</span>,</span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display" data-execution_count="14">
+<div id="fig-weights" class="quarto-float quarto-figure quarto-figure-center anchored" data-fig-pos="H">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-weights-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="14_63_2_files/figure-html/fig-weights-output-1.png" data-fig-pos="H" width="576" height="384" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-weights-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4: Time-averaged MV portfolio weights for 30 DJIA stocks, ordered by HF weight. Dashed line: equal weight (<span class="math inline">\(1/30\)</span>).
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div id="cell-ex4-extreme-text" class="cell" data-cache="false" data-execution_count="15">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>hf_max_s <span class="op">=</span> <span class="bu">max</span>(hf_avg, key<span class="op">=</span>hf_avg.get)<span class="op">;</span> hf_max_v <span class="op">=</span> hf_avg[hf_max_s]</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>hf_min_s <span class="op">=</span> <span class="bu">min</span>(hf_avg, key<span class="op">=</span>hf_avg.get)<span class="op">;</span> hf_min_v <span class="op">=</span> hf_avg[hf_min_s]</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>lw_max_s <span class="op">=</span> <span class="bu">max</span>(lw_avg, key<span class="op">=</span>lw_avg.get)<span class="op">;</span> lw_max_v <span class="op">=</span> lw_avg[lw_max_s]</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>lw_min_s <span class="op">=</span> <span class="bu">min</span>(lw_avg, key<span class="op">=</span>lw_avg.get)<span class="op">;</span> lw_min_v <span class="op">=</span> lw_avg[lw_min_s]</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>display(Markdown(</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"The HF strategy assigns its largest average weight to **</span><span class="sc">{</span>hf_max_s<span class="sc">}</span><span class="ss">** "</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"(</span><span class="sc">{</span>hf_max_v<span class="sc">:.3f}</span><span class="ss">) and its most negative to **</span><span class="sc">{</span>hf_min_s<span class="sc">}</span><span class="ss">** (</span><span class="sc">{</span>hf_min_v<span class="sc">:.3f}</span><span class="ss">). "</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"The LW strategy is most positive on **</span><span class="sc">{</span>lw_max_s<span class="sc">}</span><span class="ss">** (</span><span class="sc">{</span>lw_max_v<span class="sc">:.3f}</span><span class="ss">) "</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"and most negative on **</span><span class="sc">{</span>lw_min_s<span class="sc">}</span><span class="ss">** (</span><span class="sc">{</span>lw_min_v<span class="sc">:.3f}</span><span class="ss">). "</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"Average daily turnover is **</span><span class="sc">{</span>to_hf<span class="sc">:.3f}</span><span class="ss">** (HF) and **</span><span class="sc">{</span>to_lw<span class="sc">:.3f}</span><span class="ss">** (LW), "</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"with the </span><span class="sc">{</span><span class="st">'HF'</span> <span class="cf">if</span> to_hf <span class="op">&gt;</span> to_lw <span class="cf">else</span> <span class="st">'LW'</span><span class="sc">}</span><span class="ss"> strategy showing higher turnover."</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="ex4-extreme-text" class="cell-output cell-output-display cell-output-markdown">
+<p>The HF strategy assigns its largest average weight to <strong>VZ</strong> (0.079) and its most negative to <strong>NVDA</strong> (-0.018). The LW strategy is most positive on <strong>VZ</strong> (0.132) and most negative on <strong>AXP</strong> (-0.025). Average daily turnover is <strong>3.422</strong> (HF) and <strong>0.071</strong> (LW), with the HF strategy showing higher turnover.</p>
+</div>
+</div>
+<p><a href="#fig-weights" class="quarto-xref">Figure&nbsp;4</a> shows the time-averaged weights for all 30 stocks. Both strategies hold extreme positions, a known consequence of unconstrained MV optimisation <span class="citation" data-cites="ledoit2003">[@ledoit2003]</span>, where small estimation errors cause large weight oscillations. The notably high HF turnover reflects the fact that each day’s <span class="math inline">\(RC_d\)</span> is estimated from only <span class="math inline">\({\sim}13\)</span> intraday returns, making it noisy and causing weights to shift substantially from one day to the next.</p>
+</section>
+<section id="exercise-5-out-of-sample-portfolio-evaluation" class="level2">
+<h2 class="anchored" data-anchor-id="exercise-5-out-of-sample-portfolio-evaluation">Exercise 5: Out-of-Sample Portfolio Evaluation</h2>
+<div id="ex5-portfolio-rets" class="cell" data-execution_count="16">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># On day t, apply weights formed from data up to t-1 to the return realised on day t+1.</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>eval_sorted <span class="op">=</span> <span class="bu">sorted</span>(common_days)</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>ret_rows    <span class="op">=</span> []</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, t <span class="kw">in</span> <span class="bu">enumerate</span>(eval_sorted[:<span class="op">-</span><span class="dv">1</span>]):</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    t_next <span class="op">=</span> pd.Timestamp(eval_sorted[i <span class="op">+</span> <span class="dv">1</span>])</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> t_next <span class="kw">not</span> <span class="kw">in</span> daily_ret.index:</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>    r_next <span class="op">=</span> daily_ret.loc[t_next, symbols].values</span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> np.isnan(r_next).<span class="bu">all</span>():</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>    r_next <span class="op">=</span> np.nan_to_num(r_next, nan<span class="op">=</span><span class="fl">0.0</span>)   <span class="co"># missing returns treated as zero</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>    ret_rows.append({</span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>        <span class="st">"date"</span>:  t_next,</span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">"r_hf"</span>:  <span class="bu">float</span>(omega_HF[t] <span class="op">@</span> r_next),</span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>        <span class="st">"r_lw"</span>:  <span class="bu">float</span>(omega_LW[t] <span class="op">@</span> r_next),</span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">"r_ew"</span>:  <span class="bu">float</span>(np.ones(N_stocks) <span class="op">/</span> N_stocks <span class="op">@</span> r_next),</span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>    })</span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>portfolio_ret <span class="op">=</span> pd.DataFrame(ret_rows).set_index(<span class="st">"date"</span>).dropna()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div class="cell" data-cache="false" data-tbl-pos="H" data-execution_count="17">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> perf(col):</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    r   <span class="op">=</span> portfolio_ret[col].dropna().values</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    vol <span class="op">=</span> r.std()  <span class="op">*</span> np.sqrt(ANNUALIZE)</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    sr  <span class="op">=</span> r.mean() <span class="op">/</span> r.std() <span class="op">*</span> np.sqrt(ANNUALIZE)</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">round</span>(vol, <span class="dv">4</span>), <span class="bu">round</span>(sr, <span class="dv">3</span>)</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>vol_hf, sr_hf <span class="op">=</span> perf(<span class="st">"r_hf"</span>)</span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>vol_lw, sr_lw <span class="op">=</span> perf(<span class="st">"r_lw"</span>)</span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>vol_ew, sr_ew <span class="op">=</span> perf(<span class="st">"r_ew"</span>)</span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>performance_summary <span class="op">=</span> pd.DataFrame({</span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>    <span class="st">"Strategy"</span>:        [<span class="st">"HF (RC, t-1)"</span>, <span class="st">"LW (W = 252)"</span>, <span class="st">"Equal-weighted (1/N)"</span>],</span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>    <span class="st">"Ann. Volatility"</span>: [vol_hf, vol_lw, vol_ew],</span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>    <span class="st">"Ann. Sharpe"</span>:     [sr_hf,  sr_lw,  sr_ew],</span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>}).set_index(<span class="st">"Strategy"</span>)</span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>(</span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>    GT(performance_summary.reset_index())</span>
+<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a>    .tab_header(title<span class="op">=</span><span class="st">"Out-of-sample portfolio performance"</span>)</span>
+<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a>    .fmt_number(columns<span class="op">=</span>[<span class="st">"Ann. Volatility"</span>, <span class="st">"Ann. Sharpe"</span>], decimals<span class="op">=</span><span class="dv">3</span>)</span>
+<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a>    .cols_label(</span>
+<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a>        Strategy        <span class="op">=</span> <span class="st">"Strategy"</span>,</span>
+<span id="cb17-23"><a href="#cb17-23" aria-hidden="true" tabindex="-1"></a>        <span class="op">**</span>{<span class="st">"Ann. Volatility"</span>: <span class="st">"Ann. Volatility"</span>,</span>
+<span id="cb17-24"><a href="#cb17-24" aria-hidden="true" tabindex="-1"></a>           <span class="st">"Ann. Sharpe"</span>:     <span class="st">"Ann. Sharpe"</span>}</span>
+<span id="cb17-25"><a href="#cb17-25" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb17-26"><a href="#cb17-26" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="tbl-perf" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-tbl-pos="H" data-execution_count="17" data-cache="false">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-perf-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;1: Out-of-sample performance (second half of sample). Ann. volatility = s.d. <span class="math inline">\(\times\sqrt{252}\)</span>; Sharpe ratio = ann. mean / ann. s.d. (risk-free rate = 0, no transaction costs).
+</figcaption>
+<div aria-describedby="tbl-perf-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output cell-output-display" data-execution_count="17">
+<div id="wyrnrojmdq" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<style>
+#wyrnrojmdq table {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', 'Fira Sans', 'Droid Sans', Arial, sans-serif;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+        }
+
+#wyrnrojmdq thead, tbody, tfoot, tr, td, th { border-style: none; }
+ tr { background-color: transparent; }
+#wyrnrojmdq p { margin: 0; padding: 0; }
+ #wyrnrojmdq .gt_table { display: table; border-collapse: collapse; line-height: normal; margin-left: auto; margin-right: auto; color: #333333; font-size: 16px; font-weight: normal; font-style: normal; background-color: #FFFFFF; width: auto; border-top-style: solid; border-top-width: 2px; border-top-color: #A8A8A8; border-right-style: none; border-right-width: 2px; border-right-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #A8A8A8; border-left-style: none; border-left-width: 2px; border-left-color: #D3D3D3; }
+ #wyrnrojmdq .gt_caption { padding-top: 4px; padding-bottom: 4px; }
+ #wyrnrojmdq .gt_title { color: #333333; font-size: 125%; font-weight: initial; padding-top: 4px; padding-bottom: 4px; padding-left: 5px; padding-right: 5px; border-bottom-color: #FFFFFF; border-bottom-width: 0; }
+ #wyrnrojmdq .gt_subtitle { color: #333333; font-size: 85%; font-weight: initial; padding-top: 3px; padding-bottom: 5px; padding-left: 5px; padding-right: 5px; border-top-color: #FFFFFF; border-top-width: 0; }
+ #wyrnrojmdq .gt_heading { background-color: #FFFFFF; text-align: center; border-bottom-color: #FFFFFF; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; }
+ #wyrnrojmdq .gt_bottom_border { border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; }
+ #wyrnrojmdq .gt_col_headings { border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; }
+ #wyrnrojmdq .gt_col_heading { color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: normal; text-transform: inherit; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: bottom; padding-top: 5px; padding-bottom: 5px; padding-left: 5px; padding-right: 5px; overflow-x: hidden; }
+ #wyrnrojmdq .gt_column_spanner_outer { color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: normal; text-transform: inherit; padding-top: 0; padding-bottom: 0; padding-left: 4px; padding-right: 4px; }
+ #wyrnrojmdq .gt_column_spanner_outer:first-child { padding-left: 0; }
+ #wyrnrojmdq .gt_column_spanner_outer:last-child { padding-right: 0; }
+ #wyrnrojmdq .gt_column_spanner { border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; vertical-align: bottom; padding-top: 5px; padding-bottom: 5px; overflow-x: hidden; display: inline-block; width: 100%; }
+ #wyrnrojmdq .gt_spanner_row { border-bottom-style: hidden; }
+ #wyrnrojmdq .gt_group_heading { padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: initial; text-transform: inherit; border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; text-align: left; }
+ #wyrnrojmdq .gt_empty_group_heading { padding: 0.5px; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: initial; border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; vertical-align: middle; }
+ #wyrnrojmdq .gt_from_md> :first-child { margin-top: 0; }
+ #wyrnrojmdq .gt_from_md> :last-child { margin-bottom: 0; }
+ #wyrnrojmdq .gt_row { padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; }
+ #wyrnrojmdq .gt_stub { color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: initial; text-transform: inherit; border-right-style: solid; border-right-width: 2px; border-right-color: #D3D3D3; padding-left: 5px; padding-right: 5px; }
+ #wyrnrojmdq .gt_stub_row_group { color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: initial; text-transform: inherit; border-right-style: solid; border-right-width: 2px; border-right-color: #D3D3D3; padding-left: 5px; padding-right: 5px; vertical-align: top; }
+ #wyrnrojmdq .gt_row_group_first td { border-top-width: 2px; }
+ #wyrnrojmdq .gt_row_group_first th { border-top-width: 2px; }
+ #wyrnrojmdq .gt_striped { color: #333333; background-color: #F4F4F4; }
+ #wyrnrojmdq .gt_table_body { border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; }
+ #wyrnrojmdq .gt_grand_summary_row { color: #333333; background-color: #FFFFFF; text-transform: inherit; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; }
+ #wyrnrojmdq .gt_first_grand_summary_row_bottom { border-top-style: double; border-top-width: 6px; border-top-color: #D3D3D3; }
+ #wyrnrojmdq .gt_last_grand_summary_row_top { border-bottom-style: double; border-bottom-width: 6px; border-bottom-color: #D3D3D3; }
+ #wyrnrojmdq .gt_sourcenotes { color: #333333; background-color: #FFFFFF; border-bottom-style: none; border-bottom-width: 2px; border-bottom-color: #D3D3D3; border-left-style: none; border-left-width: 2px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 2px; border-right-color: #D3D3D3; }
+ #wyrnrojmdq .gt_sourcenote { font-size: 90%; padding-top: 4px; padding-bottom: 4px; padding-left: 5px; padding-right: 5px; text-align: left; }
+ #wyrnrojmdq .gt_left { text-align: left; }
+ #wyrnrojmdq .gt_center { text-align: center; }
+ #wyrnrojmdq .gt_right { text-align: right; font-variant-numeric: tabular-nums; }
+ #wyrnrojmdq .gt_font_normal { font-weight: normal; }
+ #wyrnrojmdq .gt_font_bold { font-weight: bold; }
+ #wyrnrojmdq .gt_font_italic { font-style: italic; }
+ #wyrnrojmdq .gt_super { font-size: 65%; }
+ #wyrnrojmdq .gt_footnote_marks { font-size: 75%; vertical-align: 0.4em; position: initial; }
+ #wyrnrojmdq .gt_asterisk { font-size: 100%; vertical-align: 0; }
+ 
+</style>
+
+<table class="gt_table cell caption-top table table-sm table-striped small" data-quarto-bootstrap="false">
+<thead>
+<tr class="gt_heading header">
+<td colspan="3" class="gt_heading gt_title gt_font_normal">Out-of-sample portfolio performance</td>
+</tr>
+<tr class="gt_col_headings even">
+<th id="Strategy" class="gt_col_heading gt_columns_bottom_border gt_left" data-quarto-table-cell-role="th" scope="col">Strategy</th>
+<th id="Ann.-Volatility" class="gt_col_heading gt_columns_bottom_border gt_right" data-quarto-table-cell-role="th" scope="col">Ann. Volatility</th>
+<th id="Ann.-Sharpe" class="gt_col_heading gt_columns_bottom_border gt_right" data-quarto-table-cell-role="th" scope="col">Ann. Sharpe</th>
+</tr>
+</thead>
+<tbody class="gt_table_body">
+<tr class="odd">
+<td class="gt_row gt_left">HF (RC, t-1)</td>
+<td class="gt_row gt_right">0.191</td>
+<td class="gt_row gt_right">0.572</td>
+</tr>
+<tr class="even">
+<td class="gt_row gt_left">LW (W = 252)</td>
+<td class="gt_row gt_right">0.141</td>
+<td class="gt_row gt_right">0.674</td>
+</tr>
+<tr class="odd">
+<td class="gt_row gt_left">Equal-weighted (1/N)</td>
+<td class="gt_row gt_right">0.179</td>
+<td class="gt_row gt_right">0.763</td>
+</tr>
+</tbody>
+</table>
+
+
+</div>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<div id="cell-ex5-discuss" class="cell" data-cache="false" data-execution_count="18">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>best_sr     <span class="op">=</span> <span class="bu">max</span>([(<span class="st">"HF"</span>, sr_hf), (<span class="st">"LW"</span>, sr_lw), (<span class="st">"EW"</span>, sr_ew)], key<span class="op">=</span><span class="kw">lambda</span> x: x[<span class="dv">1</span>])</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>lowest_sr   <span class="op">=</span> <span class="bu">min</span>([(<span class="st">"HF"</span>, sr_hf), (<span class="st">"LW"</span>, sr_lw), (<span class="st">"EW"</span>, sr_ew)], key<span class="op">=</span><span class="kw">lambda</span> x: x[<span class="dv">1</span>])</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>hf_beats_lw <span class="op">=</span> sr_hf <span class="op">&gt;</span> sr_lw</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>best_label   <span class="op">=</span> {<span class="st">"HF"</span>: <span class="st">"HF (RC, t-1)"</span>, <span class="st">"LW"</span>: <span class="st">"LW (W = 252)"</span>, <span class="st">"EW"</span>: <span class="st">"Equal-weighted"</span>}</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>display(Markdown(</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"**</span><span class="sc">{</span>best_label[best_sr[<span class="dv">0</span>]]<span class="sc">}</span><span class="ss">** achieves the highest annualised Sharpe ratio "</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"(</span><span class="sc">{</span>best_sr[<span class="dv">1</span>]<span class="sc">:.3f}</span><span class="ss">); **</span><span class="sc">{</span>best_label[lowest_sr[<span class="dv">0</span>]]<span class="sc">}</span><span class="ss">** produces the lowest "</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"(</span><span class="sc">{</span>lowest_sr[<span class="dv">1</span>]<span class="sc">:.3f}</span><span class="ss">). The HF estimator "</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span><span class="st">'outperforms'</span> <span class="cf">if</span> hf_beats_lw <span class="cf">else</span> <span class="st">'does not outperform'</span><span class="sc">}</span><span class="ss"> "</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"LW on Sharpe ratio (</span><span class="sc">{</span>sr_hf<span class="sc">:.3f}</span><span class="ss"> vs. </span><span class="sc">{</span>sr_lw<span class="sc">:.3f}</span><span class="ss">)."</span></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="ex5-discuss" class="cell-output cell-output-display cell-output-markdown">
+<p><strong>Equal-weighted</strong> achieves the highest annualised Sharpe ratio (0.763); <strong>HF (RC, t-1)</strong> produces the lowest (0.572). The HF estimator does not outperform LW on Sharpe ratio (0.572 vs.&nbsp;0.674).</p>
+</div>
+</div>
+<p>The random-walk estimator uses only a single day per forecast; in the post-2016 window, LW’s smoothing advantage dominates, producing more stable weights and a higher Sharpe ratio. HF covariance information adds most value when <span class="math inline">\(N \gg 30\)</span> and the true covariance shifts rapidly <span class="citation" data-cites="ledoit2004">[@ledoit2004]</span>; with only 30 DJIA stocks, LW already captures the dominant structure.</p>
+<p>More broadly, these results illustrate a recurring finding in the portfolio choice literature: statistical sophistication in covariance or return estimation does not automatically translate into out-of-sample economic gains. The equal-weighted benchmark achieves the highest Sharpe ratio here, consistent with the observation that estimation error in large covariance matrices can amplify, rather than reduce, portfolio risk. Estimators that exploit additional information, such as intraday returns, shrinkage targets, or factor structures, tend to deliver meaningful improvements when the signal-to-noise ratio is high: either the universe is large enough that noise in the sample covariance is severe, or the true covariance structure is time-varying rapidly enough that high-frequency updates are valuable. With <span class="math inline">\(N = 30\)</span> liquid, well-studied blue-chip stocks over a relatively calm post-2016 sample, neither condition is strongly met, so the naive <span class="math inline">\(1/N\)</span> rule proves difficult to beat <span class="citation" data-cites="ledoit2004">[@ledoit2004]</span>.</p>
+</section>
+<section id="conclusion" class="level2">
+<h2 class="anchored" data-anchor-id="conclusion">Conclusion</h2>
+<p>This report compared two covariance estimators for minimum-variance portfolio allocation across 30 DJIA stocks. The HF random-walk estimator reacts to intraday information but, with only <span class="math inline">\({\sim}13\)</span> intraday returns per day, produces noisy forecasts that drive excessive turnover and the lowest out-of-sample Sharpe ratio. The LW estimator, despite relying only on daily returns, achieves lower portfolio volatility and a higher Sharpe ratio by smoothing out day-to-day noise. The binding constraint is the signal-to-noise ratio: with <span class="math inline">\(N=30\)</span> liquid blue-chip stocks and a relatively calm post-2016 evaluation window, neither estimator generates enough precision to overcome the equally weighted benchmark. Noise-robust HF estimators such as realized kernels, or evaluations on larger and more heterogeneous universes, are natural next steps.</p>
+</section>
+<section id="references" class="level2">
+<h2 class="anchored" data-anchor-id="references">References</h2>
+<div id="refs" role="list">
+
+</div>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

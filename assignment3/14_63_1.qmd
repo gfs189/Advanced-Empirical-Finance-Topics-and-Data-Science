@@ -1,6 +1,6 @@
 ---
 title: Mandatory Assignment 3
-author: 63, 13
+author: 14, 63
 date: today
 date-format: MMMM DD, YYYY
 execute:
@@ -67,6 +67,7 @@ GAMMA           = 4       # Risk aversion (fixed throughout per assignment)
 LAMBDA_TC       = 0.1     # Transaction cost parameter λ = 1000 bp = 0.10
 COV_WINDOW      = 60      # Rolling window for covariance estimation (months)
 MIN_OBS         = 24      # Minimum valid return observations required per stock
+MIN_STOCKS      = 10      # Minimum investable stocks in a period to attempt optimisation
 MONTHS_PER_YEAR = 12
 MU_LW_STD       = 1e-5    # Target cross-sectional std for μ̂ when using MV solves (N≈1900)
 
@@ -111,7 +112,7 @@ IXN_COLS = [f"{c}_x_{m}" for c, m in product(CHAR_COLS, MACRO_COLS)]
 
 ## Introduction
 
-In this report we implement a transaction-cost-robust monthly portfolio backtest following @hautsch2019. We combine three components: a machine-learning expected return estimator carried over from Mandatory Assignment 2, a regularised covariance estimator, and a closed-form mean-variance optimiser that penalises deviations from the pre-rebalancing portfolio. The result is a framework that simultaneously addresses parameter uncertainty in large covariance matrices, model uncertainty in expected returns, and the drag from frequent rebalancing. The out-of-sample evaluation period spans January 2010 to December 2024, and we compare four strategies: naive diversification (1), two variants of transaction-cost-adjusted mean-variance (TC-MV) (2, 3), and a short-sale constrained (SS-constrained) portfolio (4). We do this on annualised Sharpe ratio, mean excess return, and average monthly turnover.
+In this report we implement a transaction-cost-robust monthly portfolio backtest following @hautsch2019. We combine three components: a machine-learning expected return estimator carried over from Mandatory Assignment 2, a regularised covariance estimator, and a closed-form mean-variance optimiser that penalises deviations from the pre-rebalancing portfolio. The three-component design addresses parameter uncertainty via covariance regularisation, model uncertainty via a machine-learning return signal, and rebalancing drag via the transaction-cost penalty. The out-of-sample evaluation period spans January 2010 to December 2024, and we compare four strategies: naive diversification, two variants of transaction-cost-adjusted mean-variance (TC-MV), and a short-sale constrained (SS-constrained) portfolio. Performance is assessed using annualised Sharpe ratio, net mean excess return, and average monthly turnover.
 
 ```{python}
 #| label: data-loading
@@ -254,7 +255,7 @@ third_sector    = sector_pct.iloc[2]["Sector"]
 display(Markdown(
     f"The filtered universe contains on average **{avg_N:.0f} stocks** per month "
     f"({data_source}), ranging from {n_min} to {n_max}. "
-    f"The double screen — price above \\$2 and market capitalisation above the NYSE 20th percentile — "
+    f"The double screen (price above \\$2 and market capitalisation above the NYSE 20th percentile) "
     f"removes penny stocks and micro-caps that distort mean-variance analysis. "
     f"The median market capitalisation across all stock-months is **\\${med_mktcap_bn:.1f} bn**, "
     f"reflecting a mid- to large-cap tilt imposed by the size screen. "
@@ -380,7 +381,9 @@ $$
 
 where $\hat B$ is the $N\times3$ matrix of OLS factor loadings, $\hat\Sigma_F$ is the $3\times3$ factor covariance, and $\hat D = \mathrm{diag}(\hat\sigma_{\varepsilon,i}^2)$ is the diagonal matrix of idiosyncratic variances. This structure ensures $\hat\Sigma_t$ is positive definite even when $N \gg T$.
 
-For $\hat\Sigma_t^{LW}$ we use Ledoit-Wolf shrinkage [@ledoit2004] applied directly to the rolling sample covariance of the same 60-month window, shrinking towards a scaled identity matrix with the analytically optimal intensity. These are two independent estimators: the factor model imposes a low-rank economic structure on $\hat\Sigma_t$, while $\hat\Sigma_t^{LW}$ regularises the sample eigenvalues toward their cross-sectional mean without imposing factor structure. The choice between them is the central comparison in Exercise 5. @fig-ex3-comparison plots the minimum-variance portfolio weights implied by each estimator at a representative month to assess whether the two approaches lead to meaningfully different allocations.
+For $\hat\Sigma_t^{LW}$ we use Ledoit-Wolf shrinkage [@ledoit2004] applied directly to the rolling sample covariance of the same 60-month window, shrinking towards a scaled identity matrix with the analytically optimal intensity. These are two independent estimators: the factor model imposes a low-rank economic structure on $\hat\Sigma_t$, while $\hat\Sigma_t^{LW}$ regularises the sample eigenvalues toward their cross-sectional mean without imposing factor structure. The choice between them is the central comparison in Exercise 5. To avoid $O(N^3)$ matrix inversions in a universe of approximately 1,900 stocks, both estimators are handled in the backtest via the Woodbury matrix identity: the factor model's $K=3$ core reduces to a $3\times3$ solve and the Ledoit-Wolf rank-$T$ factorisation to a $60\times60$ solve, keeping per-period cost linear in $N$.
+
+**Tuning decisions.** The 60-month window length balances stability against adaptiveness: shorter windows produce noisier loading estimates, while longer windows are slow to incorporate regime changes in factor exposures. Stocks with fewer than 24 valid return observations in the window are excluded to prevent near-singular idiosyncratic variance estimates for thinly traded or recently listed names. The three Fama-French factors are the standard parsimony choice; with $K=3 \ll T=60$, factor loading estimation is well-conditioned. For Ledoit-Wolf, no additional tuning is required: the shrinkage intensity is determined analytically by the Oracle approximating shrinkage formula, which minimises the expected Frobenius-norm estimation error [@ledoit2004]. @fig-ex3-comparison plots the minimum-variance portfolio weights implied by each estimator at December 2019 (a mid-sample, pre-COVID month with a stable universe) to assess whether the two approaches produce meaningfully different allocations.
 
 ```{python}
 #| label: ex3-cov-functions
@@ -488,6 +491,10 @@ def constrained_pg(mu, U, gamma, gamma_mv, n_iter=600, tol=1e-12):
     Each step: gradient of the MV objective → project onto the simplex.
     The step size is set to 1 / (γ · Lipschitz constant of the gradient).
     LW shrinkage keeps the condition number low, so convergence is fast.
+    n_iter=600: empirically more than sufficient; LW keeps condition numbers low
+    and convergence is typically observed in fewer than 100 iterations.
+    tol=1e-12: squared step-size convergence criterion — tight enough that
+    rounding to two decimal places is not affected by early stopping.
     """
     N    = U.shape[1]
     # Lipschitz constant of ∇f = γΣw − μ is γ·‖Σ‖₂ ≈ γ(‖U‖₂² + γ)
@@ -523,7 +530,8 @@ def min_var_weights(Sigma):
 #| fig-pos: "H"
 #| fig-cap: "Minimum-variance weights from the factor model ($\\hat\\Sigma$, x-axis) versus Ledoit-Wolf ($\\hat\\Sigma^{LW}$, y-axis) at December 2019. Each point is one stock; the dashed line is the 45° reference."
 
-# Use December 2019 as a representative snapshot month (mid-sample, pre-COVID)
+# December 2019: mid-sample, pre-COVID — stable universe with no obvious structural
+# breaks, making it a representative rather than cherry-picked comparison month.
 rep_date  = pd.Timestamp("2019-12-31")
 # Slice the most recent COV_WINDOW months of returns up to and including rep_date
 win_dates = returns_wide.index[returns_wide.index <= rep_date][-COV_WINDOW:]
@@ -573,7 +581,7 @@ display(Markdown(
     f"At December 2019 the two estimators produce minimum-variance weights with a "
     f"cross-sectional correlation of **{corr_w:.3f}** and a mean absolute difference of "
     f"**{mae_w*100:.2f} percentage points**. "
-    f"{'The high correlation indicates that both estimators agree on the broad cross-sectional structure of risk — which stocks are low-variance relative to the portfolio — even though they regularise differently.' if corr_w > 0.85 else 'The moderate correlation reflects the distinct regularisation philosophies: the factor model concentrates risk reduction along the three FF factors, while LW spreads it more evenly across all eigenvalues.'} "
+    f"{'The high correlation indicates that both estimators agree on the broad cross-sectional structure of risk (which stocks are low-variance relative to the portfolio) even though they regularise differently.' if corr_w > 0.85 else 'The moderate correlation reflects the distinct regularisation philosophies: the factor model concentrates risk reduction along the three FF factors, while LW spreads it more evenly across all eigenvalues.'} "
     f"The factor model preserves cross-sectional dispersion in weights driven by heterogeneous factor loadings; "
     f"LW's scaled-identity target acts as a prior toward equal-weighting, compressing the weight distribution "
     f"and reducing the most extreme long and short positions. "
@@ -651,11 +659,11 @@ mu_predictions = X_all[["permno", "date"]].assign(mu_hat=mu_hat_all)
 
 We evaluate four strategies over portfolio-return months **January 2010 – December 2024** (portfolios formed December 2009 – November 2024). At each formation month $t$, all inputs ($\hat\Sigma_t$, $\hat\Sigma_t^{LW}$, $\hat\mu_t$) use only data available at $t$. We set $\gamma=4$ and $\lambda=0.1$.
 
-Predicted returns $\hat\mu_t$ are winsorised cross-sectionally at the 1st and 99th percentile each month, then normalised to a $10^{-5}$ monthly cross-sectional standard deviation before both TC-MV solves. Without normalisation, $\hat\Sigma^{-1}\hat\mu$ produces extreme long/short positions under either covariance model: the factor model's heterogeneous idiosyncratic variances scale each stock's signal by $1/\hat\sigma_{\varepsilon,i}^2$, while the near-isotropic $\hat\Sigma^{LW}\approx(\alpha\bar\sigma^2)I$ amplifies all signals by $(\alpha\bar\sigma^2)^{-1}\approx 500$. With $N\approx 1\,900$ stocks the aggregate turnover scales proportionally with both $N$ and the signal magnitude; the $10^{-5}$ target keeps monthly turnover in the single digits for both strategies. Normalisation retains the cross-sectional ordering of RF predictions — only their magnitude is rescaled — and is applied identically to both covariance frameworks to permit a fair comparison.
+Predicted returns $\hat\mu_t$ are winsorised cross-sectionally at the 1st and 99th percentile each month, then normalised to a $10^{-5}$ monthly cross-sectional standard deviation before both TC-MV solves. Without normalisation, $\hat\Sigma^{-1}\hat\mu$ produces extreme long/short positions under either covariance model: the factor model's heterogeneous idiosyncratic variances scale each stock's signal by $1/\hat\sigma_{\varepsilon,i}^2$, while the near-isotropic $\hat\Sigma^{LW}\approx(\alpha\bar\sigma^2)I$ amplifies all signals by $(\alpha\bar\sigma^2)^{-1}\approx 500$. With $N\approx 1\,900$ stocks the aggregate turnover scales proportionally with both $N$ and the signal magnitude; the $10^{-5}$ target keeps monthly turnover in the single digits for both strategies. Normalisation retains the cross-sectional ordering of RF predictions (only their magnitude is rescaled) and is applied identically to both covariance frameworks to permit a fair comparison.
 
 Net excess returns deduct the quadratic transaction cost implied by the optimisation objective:
 $$r_t^{\mathrm{net}} = \omega_t'\,r_{t+1} - \lambda(\omega_t - \omega_t^{+})'\hat\Sigma_t(\omega_t - \omega_t^{+}).$$
-Monthly turnover follows @hautsch2019 equation 46: $\mathrm{TO}_t = \sum_i|\omega_{i,t} - \omega_{i,t}^{+}|$. For strategies without an optimised covariance model — naive $1/N$ and the short-sale constrained portfolio — the TC deduction is evaluated under $\hat\Sigma_t^{LW}$ to provide a consistent benchmark. Summary statistics are reported in @tbl-ex5-table and cumulative return paths in @fig-ex5-cumplot.
+Monthly turnover follows @hautsch2019 equation 46: $\mathrm{TO}_t = \sum_i|\omega_{i,t} - \omega_{i,t}^{+}|$. For strategies without an optimised covariance model (naive $1/N$ and the short-sale constrained portfolio), the TC deduction is evaluated under $\hat\Sigma_t^{LW}$ to provide a consistent benchmark. Summary statistics are reported in @tbl-ex5-table and cumulative return paths in @fig-ex5-cumplot.
 
 ```{python}
 #| label: ex5-backtest
@@ -710,7 +718,7 @@ for idx, t in enumerate(formation_dates):
 
     # ── 1. Universe for month t (O(1) lookup) ────────────────────────────────
     permnos_t = univ_mktcap_dict.get(t, np.array([]))
-    if len(permnos_t) < 10:
+    if len(permnos_t) < MIN_STOCKS:
         continue
 
     # ── 2. Rolling 60-month window via binary search ──────────────────────────
@@ -720,7 +728,7 @@ for idx, t in enumerate(formation_dates):
     win_dates = rw_di[max(0, pos - COV_WINDOW): pos]
 
     permnos_t = permnos_t[np.isin(permnos_t, list(rw_col_set))]
-    if len(permnos_t) < 10:
+    if len(permnos_t) < MIN_STOCKS:
         continue
 
     R_win     = returns_wide.loc[win_dates, permnos_t]
@@ -729,7 +737,7 @@ for idx, t in enumerate(formation_dates):
     R_win     = R_win[permnos_t].dropna(axis=1)
     permnos_t = R_win.columns.values
 
-    if R_win.shape[0] < MIN_OBS or R_win.shape[1] < 10:
+    if R_win.shape[0] < MIN_OBS or R_win.shape[1] < MIN_STOCKS:
         continue
 
     N      = R_win.shape[1]
@@ -985,13 +993,15 @@ display(Markdown(
     f"{'small and suggests the two estimators are broadly substitutable in this backtest' if sr_diff < 0.10 else 'economically meaningful, indicating the choice of covariance regularisation has a material impact on risk-adjusted performance'}. "
     f"Average monthly turnover is {to_factor:.3f} for the factor model versus {to_lw:.3f} for LW; "
     f"the {'higher' if to_factor > to_lw else 'lower'} turnover of the factor model reflects "
-    f"the stability of its low-rank K=3 structure — beta estimates and factor covariances evolve "
+    f"the stability of its low-rank K=3 structure: beta estimates and factor covariances evolve "
     f"slowly over 60-month windows, so weights shift less month to month than under LW, which "
     f"responds more sensitively to changes in the full sample covariance matrix."
 ))
 ```
 
-The short-sale constrained portfolio implicitly regularises $\hat\Sigma^{LW}$ further: in the minimum-variance ($\mu=0$) case, as shown by @jagannathan2003, imposing non-negativity constraints is equivalent to shrinking negative off-diagonal covariance elements to zero. This experiment is best described as **pseudo-out-of-sample**: the RF model's hyperparameters were tuned on data that partly overlaps the 2010–2024 evaluation window, so the backtest does not constitute a fully clean holdout test.
+The short-sale constrained portfolio implicitly regularises $\hat\Sigma^{LW}$ further: in the minimum-variance ($\mu=0$) case, as shown by @jagannathan2003, imposing non-negativity constraints is equivalent to shrinking negative off-diagonal covariance elements to zero.
+
+The extent to which this constitutes a true out-of-sample experiment depends on which component is examined. The covariance estimation is genuinely out-of-sample: the 60-month rolling window is strictly backward-looking at each formation date $t$, so neither $\hat\Sigma_t$ nor $\hat\Sigma_t^{LW}$ use any return data after $t$. The structural parameter choices ($\gamma=4$, $\lambda=0.1$, and the 60-month window length) were taken from the prior literature rather than tuned on the 2010–2024 evaluation sample, which partially insulates the design from in-sample overfitting. The main source of contamination is the Random Forest: its hyperparameters were selected in MA2 via cross-validation without a strict pre-2010 cutoff, so the model's structure implicitly reflects the statistical properties of the full sample period. The universe filter introduces mild look-ahead as well: the NYSE 20th-percentile breakpoint is re-computed each month from all available CRSP history rather than from a threshold anchored before 2010, although this is unlikely to materially bias results. The experiment is therefore best described as pseudo-out-of-sample: the covariance and portfolio allocation structure is clean, but the expected return signal is not a fully held-out forecast.
 
 ## 6. Guest Lecture
 
@@ -999,7 +1009,7 @@ Cilie Feldager's lecture highlighted how Danske Bank approaches LLM and AI integ
 
 ## Conclusion
 
-This assignment demonstrates that accounting for transaction costs materially changes portfolio construction decisions. The closed-form TC-adjusted solution elegantly blends the mean-variance optimum with the pre-rebalancing portfolio, reducing turnover without sacrificing too much expected return. Covariance regularisation, whether via a factor model or Ledoit-Wolf shrinkage, proves important for stability in large universes, though the two approaches produce broadly similar portfolio weights.
+Accounting for transaction costs materially changes portfolio construction: without the TC penalty, mean-variance optimisation produces high-turnover allocations that erode net returns in practice. The closed-form solution resolves this by expressing $\omega^*_{t+1}$ as a convex combination of the Markowitz optimum and the pre-rebalancing portfolio, with $\lambda$ governing the trade-off. Covariance regularisation is necessary for stability when $N\gg T$, but the factor model and Ledoit-Wolf approaches converge to broadly similar allocations, suggesting that the choice of regularisation method is less consequential than the choice of expected return model.
 
 ## References
 
